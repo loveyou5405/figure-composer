@@ -5,6 +5,7 @@ src-tauri/target/
 .codex-pptx-build/
 .playwright-cli/
 output/
+.figure-composer-runtime/
 *.tsbuildinfo
 *.local
 .DS_Store

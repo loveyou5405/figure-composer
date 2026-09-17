@@ -1,8 +1,8 @@
 # Desktop Packaging
 
 Module: Desktop Packaging  
-Spec version: 1.1.0  
-Implementation status: Milestone 12 v1 source implemented; native release verification pending  
+Spec version: 1.2.0
+Implementation status: Milestone 12 v1.0.1 source implemented; native release verification pending
 Last updated: 2026-09-18  
 Depends on: UI Shell, Project Save and Load, Asset Import, PPTX Export, ADR-007, ADR-008
 
@@ -11,6 +11,8 @@ Depends on: UI Shell, Project Save and Load, Asset Import, PPTX Export, ADR-007,
 Wrap the existing React/Vite editor in a thin Tauri 2 desktop shell for Windows and macOS without moving canonical document behavior out of tested TypeScript domain modules.
 
 The production deliverables are a double-clickable `Figure Composer.exe` on Windows and `Figure Composer.app` on macOS. Production bundles `dist/` directly and never requires npm, Python, localhost commands, a terminal, or a separately managed development server.
+
+Until the native build toolchain is available, the repository also carries a clearly identified Windows managed-preview pair: `Figure Composer Launcher <visible-version>.cmd` and `Close Figure Composer <visible-version>.cmd`. Each command window runs minimized and closes after its action. The launcher owns one strict-port Vite child and opens the default browser. The closer sends an authenticated command through a launch-specific local named pipe; it must not scan for or broadly terminate Node processes. This interim pair requires Node.js and is never represented as the final production package.
 
 ## 2. Native integration
 
@@ -50,7 +52,7 @@ Successful explicit Save and explicit Discard clear recovery. Normal shutdown fl
 
 ## 9. Version identity and rollback record
 
-`package.json` is the web version source. The UI derives its visible label from it (`1.0.0` → `v1.0`). Cargo and Tauri use the exact semantic version and the desktop title includes the visible version. `npm run version:check` blocks builds unless npm, Cargo, Tauri, `CHANGELOG.md`, and `VERSION_HISTORY.md` agree. Each release adds an immutable `specs/releases/vX.Y.Z.md` record and should receive a matching source-control tag or archived source snapshot.
+`package.json` is the web version source. The UI derives its visible label from it (`1.0.1` → `v1.0.1`). Cargo and Tauri use the exact semantic version and the desktop title includes the visible version. `npm run launcher:generate` replaces the two generated preview-control files with names and embedded versions derived from that source. `npm run version:check` blocks builds unless npm, Cargo, Tauri, preview controls, `CHANGELOG.md`, `VERSION_HISTORY.md`, and the immutable release record agree. Each release adds `specs/releases/vX.Y.Z.md` and should receive a matching source-control tag or archived source snapshot.
 
 ## 10. Release verification
 
@@ -66,3 +68,4 @@ The current development host has no Rust/Cargo or native PowerPoint installation
 
 - 1.0.0: Added Tauri 2 shell, capability boundary, native file workflows, desktop source restoration, shortcuts, onboarding, demo project, and RC verification contract.
 - 1.1.0: Added mandatory v1 double-click/no-server architecture, unsaved-close coordinator, isolated locked session TEMP lifecycle, stale cleanup, recovery/settings separation, multi-instance safety, synchronized visible versioning, and expanded manual release gates.
+- 1.2.0: Added versioned Windows managed-preview start/stop controls, ownership-scoped named-pipe shutdown, and mandatory launcher version regeneration/checking while preserving the final no-server Tauri requirement.

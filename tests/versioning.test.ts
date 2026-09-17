@@ -6,8 +6,8 @@ import { APP_DISPLAY_VERSION, APP_NAME_WITH_VERSION, APP_VERSION } from "../src/
 describe("application version contract", () => {
   it("uses package metadata as the web application version source", () => {
     expect(APP_VERSION).toBe(packageMetadata.version);
-    expect(APP_DISPLAY_VERSION).toBe("v1.0");
-    expect(APP_NAME_WITH_VERSION).toBe("Figure Composer v1.0");
+    expect(APP_DISPLAY_VERSION).toBe("v1.0.1");
+    expect(APP_NAME_WITH_VERSION).toBe("Figure Composer v1.0.1");
   });
 
   it("keeps the desktop launcher metadata and visible title in sync", () => {

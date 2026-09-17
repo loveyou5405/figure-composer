@@ -1,7 +1,7 @@
 {
   "name": "figure-composer",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,7 +12,10 @@
     "tauri": "tauri",
     "desktop:dev": "tauri dev",
     "desktop:build": "npm run version:check && tauri build",
-    "version:check": "node scripts/check-version-consistency.mjs"
+    "version:check": "node scripts/check-version-consistency.mjs",
+    "launcher:generate": "node scripts/generate-windows-launchers.mjs",
+    "launcher:start": "node scripts/preview-launcher.mjs",
+    "launcher:stop": "node scripts/preview-closer.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "2.11.1",

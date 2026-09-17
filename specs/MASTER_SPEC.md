@@ -1,7 +1,7 @@
 # Figure Composer Master Specification
 
 Spec version: 1.1.0  
-Implementation status: Milestones 1-12 implemented as v1.0 source; native certification pending  
+Implementation status: Milestones 1-12 implemented as v1.0.1 source; native certification pending
 Last updated: 2026-09-18
 
 ## 1. Product goal
@@ -27,7 +27,7 @@ Figure Composer is a simple, local-first application that removes repetitive siz
 - Production desktop builds bundle the frontend, require no terminal or development server, and terminate when the main window closes.
 - Dirty native shutdown requires an explicit Save, Discard, or Cancel decision.
 - Disposable per-session TEMP, persistent recovery, and persistent user settings are separate storage classes.
-- Web and desktop version identity must remain synchronized and every release must have a rollback-oriented history record.
+- Web, desktop, launcher, and closer version identity must remain synchronized and every release must have a rollback-oriented history record.
 
 ## 3. Architecture boundaries
 
@@ -71,4 +71,4 @@ AI classification, journal presets, collaboration, cloud sync, OCR, PDF editing,
 
 ## 8. Current limitations
 
-Milestones 1-12 are implemented in the `1.0.0` (`v1.0`) source checkpoint, including desktop shutdown protection, session TEMP ownership, stale cleanup, persistent settings, and synchronized version enforcement. Remaining work is release-environment certification: build and install Windows/macOS packages, verify double-click launch and full process termination, exercise TEMP cleanup/forced-crash recovery/OS drag-drop in packaged binaries, and open a generated three-page deck in native PowerPoint. Advanced SVG/font fidelity still depends on the receiving PowerPoint installation; TIFF continues to export its safe first-page PNG preview.
+Milestones 1-12 are implemented in the `1.0.1` (`v1.0.1`) source checkpoint, including desktop shutdown protection, session TEMP ownership, stale cleanup, persistent settings, synchronized version enforcement, and versioned Windows preview controls. Remaining work is release-environment certification: build and install Windows/macOS packages, verify the final no-server double-click launch and full process termination, exercise TEMP cleanup/forced-crash recovery/OS drag-drop in packaged binaries, and open a generated three-page deck in native PowerPoint. Advanced SVG/font fidelity still depends on the receiving PowerPoint installation; TIFF continues to export its safe first-page PNG preview.

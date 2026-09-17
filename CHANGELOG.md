@@ -19,6 +19,22 @@ All notable changes to Figure Composer are documented here. Versions follow Sema
 - Added structural validation and pure operations for page creation, page-scoped mutations, and explicit cross-page panel movement.
 - Updated the future PPTX contract to emit one ordered A4 slide per project page.
 
+## [1.0.1] - 2026-09-18
+
+### Added
+
+- Versioned, double-clickable Windows preview launcher and closer files.
+- A launch-specific named-pipe control channel so the closer shuts down only its owned preview process tree.
+- Launcher regeneration and build-time checks that keep launcher, closer, web, Cargo, Tauri, changelog, and release-record versions synchronized.
+
+### Changed
+
+- Updated the visible web and desktop version to `v1.0.1`.
+
+### Known limitations
+
+- The preview controls require the existing Node.js environment and are not a substitute for the final bundled Tauri `.exe`; native packaging still requires Rust and MSVC tooling.
+
 ## [1.0.0] - 2026-09-18
 
 ### Added

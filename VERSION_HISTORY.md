@@ -1,6 +1,16 @@
 # Figure Composer Version History
 
-Every released version must update `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, `CHANGELOG.md`, this file, and its immutable file under `specs/releases/`. The production build fails when these version records disagree.
+Every released version must update `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, `CHANGELOG.md`, this file, its immutable file under `specs/releases/`, and the versioned launcher/closer. The production build fails when these version records disagree.
+
+## v1.0.1 — 1.0.1 — 2026-09-18
+
+- Added double-clickable Windows `Figure Composer Launcher v1.0.1.cmd` and `Close Figure Composer v1.0.1.cmd` controls.
+- The launcher runs a hidden, managed local preview and opens the default browser; the closer authenticates through a launch-specific named pipe and stops only the child process owned by that launcher.
+- Added `npm run launcher:generate` so later releases regenerate filenames and embedded versions from `package.json`.
+- Expanded the build-time version gate and automated tests to require synchronized web, Tauri, Cargo, launcher, closer, changelog, and immutable release-record versions.
+- This remains an interim Node-based preview control while native Tauri packaging awaits a Rust/MSVC-capable build host.
+
+Rollback reference: restore Git tag `v1.0.1`, run `npm install`, then run `npm test` and `npm run build`. To return to the prior release, restore tag `v1.0.0`. Project schema remains `0.1.0`.
 
 ## v1.0 — 1.0.0 — 2026-09-17
 

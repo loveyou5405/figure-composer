@@ -2,7 +2,7 @@
 
 Figure Composer is a local-first scientific figure assembly application. It provides a deterministic A4 workspace for arranging biomedical manuscript and thesis panels, with editable PowerPoint as the primary output.
 
-Figure Composer `v1.0` includes all Milestones 1-12, deterministic Review findings, and a thin Tauri 2 desktop shell while retaining the same local-first, millimeter-based multi-page model and editable PowerPoint output.
+Figure Composer `v1.0.1` includes all Milestones 1-12, deterministic Review findings, and a thin Tauri 2 desktop shell while retaining the same local-first, millimeter-based multi-page model and editable PowerPoint output.
 
 The canonical project architecture is multi-page: an ordered project contains independent A4 pages, and every panel belongs to exactly one page with page-local millimeter geometry. Compact navigation and page management operate without introducing a stacked document canvas.
 
@@ -13,6 +13,19 @@ The canonical project architecture is multi-page: an ordered project contains in
 - Rust 1.77.2 or newer plus the platform Tauri prerequisites (desktop builds only)
 
 ## Run locally
+
+On Windows, double-click `Figure Composer Launcher v1.0.1.cmd` to start the managed local preview and open it in the default browser. Double-click `Close Figure Composer v1.0.1.cmd` to stop only the preview process owned by that launcher. The command window is minimized and closes after the action finishes. These controls require Node.js and are an interim convenience until the native Tauri executable is built; they are not the final no-server desktop package.
+
+After any version change, update npm, Cargo, Tauri, the changelog/release record, then run:
+
+```bash
+npm run launcher:generate
+npm run version:check
+```
+
+The generated launcher and closer filenames, their embedded semantic version, the web label, and the desktop title must all agree before a production build can pass.
+
+For terminal-based development:
 
 ```bash
 npm install
@@ -96,6 +109,7 @@ npm run version:check
 - Save / Discard / Cancel protection when closing an unsaved desktop project
 - Per-launch isolated temporary workspace with active-instance locking and stale-session cleanup
 - Persistent preferences, reusable presets, label profiles, and recent settings outside disposable TEMP
-- Synchronized `v1.0` web/desktop identity with build-enforced version history
+- Synchronized `v1.0.1` web/desktop/launcher identity with build-enforced version history
+- Versioned Windows preview launcher and ownership-scoped closer with no broad process termination
 
-See `specs/releases/v1.0.0.md`, `VERSION_HISTORY.md`, and `CHANGELOG.md` for the current release and rollback record.
+See `specs/releases/v1.0.1.md`, `VERSION_HISTORY.md`, and `CHANGELOG.md` for the current release and rollback record.
