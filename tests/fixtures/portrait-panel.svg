@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="800" viewBox="0 0 400 800">
+  <rect width="400" height="800" fill="#f4f8f1"/>
+  <circle cx="200" cy="260" r="115" fill="#73ad70" opacity=".75"/>
+  <circle cx="155" cy="420" r="90" fill="#efb45e" opacity=".78"/>
+  <circle cx="245" cy="485" r="105" fill="#6d8fc8" opacity=".7"/>
+  <text x="45" y="700" font-family="Arial" font-size="32" font-weight="700" fill="#253143">Vector image</text>
+</svg>

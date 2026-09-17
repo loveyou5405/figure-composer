@@ -1,0 +1,26 @@
+[package]
+name = "figure-composer"
+version = "1.0.0"
+description = "A local-first scientific figure composer"
+authors = ["Figure Composer"]
+edition = "2021"
+
+[lib]
+name = "figure_composer_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+fs2 = "0.4.3"
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

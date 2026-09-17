@@ -1,0 +1,40 @@
+{
+  "name": "figure-composer",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run version:check && tsc -b && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "tauri": "tauri",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "npm run version:check && tauri build",
+    "version:check": "node scripts/check-version-consistency.mjs"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "2.11.1",
+    "@tauri-apps/plugin-dialog": "2.7.3",
+    "@tauri-apps/plugin-fs": "2.5.2",
+    "jszip": "3.10.2",
+    "pptxgenjs": "4.0.1",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "utif": "^3.1.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.11.4",
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "@types/utif": "^3.0.6",
+    "@vitejs/plugin-react": "6.1.1",
+    "typescript": "5.6.3",
+    "vite": "8.3.0",
+    "vitest": "4.1.11"
+  },
+  "overrides": {
+    "image-size": "2.0.4"
+  }
+}

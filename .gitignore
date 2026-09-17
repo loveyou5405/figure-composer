@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+src-tauri/target/
+.codex-pptx-build/
+.playwright-cli/
+output/
+*.tsbuildinfo
+*.local
+.DS_Store
+Thumbs.db
