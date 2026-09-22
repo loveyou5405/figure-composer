@@ -1166,6 +1166,13 @@ export function App() {
     }));
   }, [commitDocument]);
 
+  const renameProject = useCallback((title: string) => {
+    commitDocument("Rename figure", (current) => ({
+      ...current,
+      project: { ...current.project, title },
+    }));
+  }, [commitDocument]);
+
   const commitDefaultLabelOffsets = useCallback((
     defaultOffsetXmm: number,
     defaultOffsetYmm: number,
@@ -1724,13 +1731,24 @@ export function App() {
       <header className="topbar">
         <div className="brand-block">
           <span className="brand-mark" aria-hidden="true">FC</span>
-          <div><strong>Figure Composer <span className="app-version">{APP_DISPLAY_VERSION}</span></strong><span>{project.title} · {saveStatus}</span></div>
+          <div>
+            <strong>Figure Composer <span className="app-version">{APP_DISPLAY_VERSION}</span></strong>
+            <label className="project-title-editor">
+              <span className="visually-hidden">Figure name</span>
+              <input
+                aria-label="Figure name"
+                value={project.title}
+                onChange={(event) => renameProject(event.target.value)}
+                onBlur={() => { if (!project.title.trim()) renameProject("Untitled figure"); }}
+              />
+              <small> · {saveStatus}</small>
+            </label>
+          </div>
         </div>
         <div className="document-actions" aria-label="Project file and history actions">
           <button onClick={startNewProject}>New</button>
           <button title="Open a portable .figproj Figure project" onClick={() => void requestOpenProject()}>Import Figure</button>
           <button disabled={isSavingProject} title="Save one portable .figproj with all original images" onClick={() => void saveProject(false)}>Save</button>
-          <button disabled={isSavingProject} title="Save a portable copy with all original images" onClick={() => void saveProject(true)}>Save As</button>
           <button aria-label="Undo" disabled={!canUndo(history)} onClick={performUndo}>Undo</button>
           <button aria-label="Redo" disabled={!canRedo(history)} onClick={performRedo}>Redo</button>
         </div>

@@ -4,6 +4,19 @@ All notable changes to Figure Composer are documented here. Versions follow Sema
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-09-22
+
+### Added
+
+- Added an editable Figure name field in the top bar.
+- Added dated custom project filenames in the `YYYYMMDD_Custom Name.figproj` format.
+- Added explicit backward-compatibility and migration rules for saved `.figproj` files.
+
+### Changed
+
+- Save reuses the current writable file and overwrites it when the platform supports that operation.
+- Removed the separate Save As button from the compact top bar; a new dated file can still be created through the platform save flow.
+
 ## [1.3.0] - 2026-09-22
 
 ### Added

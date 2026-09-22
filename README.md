@@ -25,6 +25,8 @@ npm run version:check
 
 The generated launcher and closer filenames, their embedded semantic version, the web label, and the desktop title must all agree before a production build can pass.
 
+Project compatibility rule: every newer release must continue importing existing `.figproj` files. Project schema changes require an explicit migration and regression test; old files must not become unreadable merely because the application was updated. The Figure name is editable from the top bar. `Save` overwrites the currently selected file when the platform provides a writable file handle; when a new download is required, the filename is generated as `YYYYMMDD_Custom Name.figproj`.
+
 For terminal-based development:
 
 ```bash

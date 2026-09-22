@@ -11,7 +11,7 @@ import {
 } from "../src/domain/projectFile";
 import { appendA4Page, updateProjectPagePanels } from "../src/domain/project";
 import { AUTOSAVE_DELAY_MS, clearRecovery, readRecovery, scheduleRecovery, writeRecovery } from "../src/services/recovery";
-import { saveProjectDocument, type FilePickerWindow, type ProjectFileHandle } from "../src/services/projectFileIo";
+import { formatProjectFileName, saveProjectDocument, type FilePickerWindow, type ProjectFileHandle } from "../src/services/projectFileIo";
 
 afterEach(() => vi.useRealTimers());
 
@@ -52,6 +52,10 @@ function documentWithPanel(): EditorDocument {
 }
 
 describe("versioned .figproj persistence", () => {
+  it("formats portable project names with a local calendar date and custom title", () => {
+    expect(formatProjectFileName("My Figure", new Date(2026, 8, 22))).toBe("20260922_My Figure");
+    expect(formatProjectFileName("", new Date(2026, 0, 3))).toBe("20260103_Untitled figure");
+  });
   it("round-trips all canonical multi-page document data without embedding source bytes", () => {
     const source = documentWithPanel();
     const json = serializeProjectFile(source, "2026-09-17T00:00:00.000Z");

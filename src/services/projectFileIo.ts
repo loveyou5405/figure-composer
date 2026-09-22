@@ -35,7 +35,7 @@ export async function saveProjectDocument(
     let handle = saveAs ? null : currentHandle;
     if (!handle && hostWindow.showSaveFilePicker) {
       handle = await hostWindow.showSaveFilePicker({
-        suggestedName: `${safeFileName(projectTitle)}${PROJECT_FILE_EXTENSION}`,
+        suggestedName: `${formatProjectFileName(projectTitle)}${PROJECT_FILE_EXTENSION}`,
         types: [{ description: "Portable Figure Composer project", accept: { [PORTABLE_PROJECT_MIME]: [PROJECT_FILE_EXTENSION] } }],
       });
     }
@@ -45,7 +45,7 @@ export async function saveProjectDocument(
       await writable.close();
       return { handle, cancelled: false, usedDownloadFallback: false };
     }
-    downloadProject(projectBlob, `${safeFileName(projectTitle)}${PROJECT_FILE_EXTENSION}`, hostWindow.document);
+    downloadProject(projectBlob, `${formatProjectFileName(projectTitle)}${PROJECT_FILE_EXTENSION}`, hostWindow.document);
     return { handle: null, cancelled: false, usedDownloadFallback: true };
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
@@ -67,4 +67,11 @@ function downloadProject(blob: Blob, name: string, document: Document): void {
 function safeFileName(title: string): string {
   const safe = title.trim().replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-");
   return safe || "Untitled figure";
+}
+
+export function formatProjectFileName(title: string, date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}${month}${day}_${safeFileName(title)}`;
 }

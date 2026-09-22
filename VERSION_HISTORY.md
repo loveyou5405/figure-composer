@@ -2,6 +2,15 @@
 
 Every released version must update `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, `CHANGELOG.md`, this file, its immutable file under `specs/releases/`, and the versioned launcher/closer. The production build fails when these version records disagree.
 
+## v1.3.1 — 1.3.1 — 2026-09-22
+
+- Added editable Figure naming in the top bar.
+- Save now overwrites the current writable file; new browser files use `YYYYMMDD_Custom Name.figproj`.
+- Recorded the rule that all future releases must import previously supported `.figproj` files through explicit migrations and regression tests.
+- Regenerated the versioned Windows launcher and closer.
+
+Rollback reference: restore `v1.3.0`, reinstall exact dependencies, and rerun the verification contract. Project schema remains `0.1.0`.
+
 ## v1.3 — 1.3.0 — 2026-09-22
 
 - Replaced metadata-only Save output with a single portable `.figproj` ZIP-compatible container containing `project.json` and every original image file.
