@@ -17,7 +17,7 @@ import {
   resetPanelToPreset,
   type PanelPreset,
 } from "../src/domain/preset";
-import { resizePanelGeometry, type Panel } from "../src/domain/panel";
+import { getPowerPointReferenceSizeMm, resizePanelGeometry, type Panel } from "../src/domain/panel";
 import { createDefaultPanelLabel } from "../src/domain/labels";
 
 const types = createDefaultPanelTypes();
@@ -78,6 +78,14 @@ describe("default scientific presets", () => {
 });
 
 describe("manual override lifecycle", () => {
+  it("maps a 60% editor scale to 60% of the PowerPoint 96 DPI reference size", () => {
+    const reference = getPowerPointReferenceSizeMm(384, 192);
+    const panel = { ...makePanel(), baseSizeMm: reference };
+    const scaled = applyManualScaleToPanel(panel, 60, A4_PORTRAIT);
+    expect(scaled.geometry.widthMm).toBe(60.96);
+    expect(scaled.geometry.heightMm).toBe(30.48);
+  });
+
   it("marks manual resize as an override", () => {
     const wb = getPresetForType(types, presets, DEFAULT_TYPE_IDS.WB);
     const following = applyPresetToPanel(makePanel(), wb.type.id, wb.preset, A4_PORTRAIT);

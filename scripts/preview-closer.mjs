@@ -18,16 +18,11 @@ if (!state) {
   process.exit(0);
 }
 
-if (state.version !== version) {
-  console.error(`The running preview reports ${state.version}; use its matching closer.`);
-  process.exit(2);
-}
-
 try {
   const response = await sendRuntimeCommand(state, "close");
   if (response?.status !== "closing") throw new Error("The launcher refused the close request.");
-  console.log(`Figure Composer v${version} is closing.`);
+  console.log(`Figure Composer v${state.version} is closing.`);
 } catch {
-  console.error(`Figure Composer v${version} did not respond to the close request. No unrelated process was terminated.`);
+  console.error(`Figure Composer v${state.version} did not respond to the close request. No unrelated process was terminated.`);
   process.exitCode = 1;
 }

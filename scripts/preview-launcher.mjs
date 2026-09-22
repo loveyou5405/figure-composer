@@ -76,7 +76,7 @@ async function runLauncher() {
       if (response?.status === "ready") {
         if (existing.version !== version) {
           throw new Error(
-            `Figure Composer ${existing.displayVersion ?? `v${existing.version}`} is already running. Close it with its matching closer before starting v${version}.`,
+            `Figure Composer ${existing.displayVersion ?? `v${existing.version}`} is already running. Close it before starting v${version}.`,
           );
         }
         if (!noOpen) openPreview();

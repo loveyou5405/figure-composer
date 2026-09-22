@@ -1,9 +1,9 @@
 # Panel Presets
 
 Module: Panel Presets  
-Spec version: 0.2.0  
+Spec version: 0.3.0
 Implementation status: Milestone 3 implemented  
-Last updated: 2026-09-16  
+Last updated: 2026-09-20
 Depends on: Project Model, Asset Import
 
 ## 1. Responsibility
@@ -12,7 +12,7 @@ Own panel types and reusable deterministic sizing rules.
 
 ## 2. User-facing behavior
 
-Assigning a type applies its active preset from the panel's stable imported base size and clears any manual override. Manual resize or scale remains available and shows Modified status with a contextual reset action. The compact Presets sidebar lists every type and scale and opens an inline editor for name, scale, and aspect-ratio lock.
+Assigning a type applies its active preset from the panel's stable PowerPoint reference size and clears any manual override. The 100% reference is the source's intrinsic pixel size at 96 DPI, matching the original-size basis reported for generated PowerPoint images. Manual resize or PPT scale remains available and shows Modified status with a contextual reset action. The compact Presets sidebar lists every type and scale and opens an inline editor for name, scale, and aspect-ratio lock.
 
 ## 3. Data model
 
@@ -58,3 +58,4 @@ Multi-select UI, preset import/export, target-width sizing mode, per-panel lock 
 
 - 0.1.0: Initial planned contract and defaults.
 - 0.2.0: Implemented default/custom types, relative presets, inspector assignment and overrides, tolerant status, and explicit batch update policies.
+- 0.3.0: Rebased stable panel size and all preset/manual percentages on PowerPoint's 96 DPI original-image reference.

@@ -1,5 +1,5 @@
-import type { EditorDocument } from "../domain/editorDocument";
-import { PROJECT_FILE_EXTENSION, serializeProjectFile } from "../domain/projectFile";
+import { PROJECT_FILE_EXTENSION } from "../domain/projectFile";
+import { PORTABLE_PROJECT_MIME } from "./portableProject";
 
 export interface WritableFileStreamLike {
   write(data: Blob | string): Promise<void>;
@@ -25,27 +25,27 @@ export interface SaveProjectResult {
 }
 
 export async function saveProjectDocument(
-  document: EditorDocument,
+  projectBlob: Blob,
+  projectTitle: string,
   currentHandle: ProjectFileHandle | null,
   saveAs: boolean,
   hostWindow: FilePickerWindow = window,
 ): Promise<SaveProjectResult> {
-  const json = serializeProjectFile(document);
   try {
     let handle = saveAs ? null : currentHandle;
     if (!handle && hostWindow.showSaveFilePicker) {
       handle = await hostWindow.showSaveFilePicker({
-        suggestedName: `${safeFileName(document.project.title)}${PROJECT_FILE_EXTENSION}`,
-        types: [{ description: "Figure Composer project", accept: { "application/json": [PROJECT_FILE_EXTENSION] } }],
+        suggestedName: `${safeFileName(projectTitle)}${PROJECT_FILE_EXTENSION}`,
+        types: [{ description: "Portable Figure Composer project", accept: { [PORTABLE_PROJECT_MIME]: [PROJECT_FILE_EXTENSION] } }],
       });
     }
     if (handle) {
       const writable = await handle.createWritable();
-      await writable.write(json);
+      await writable.write(projectBlob);
       await writable.close();
       return { handle, cancelled: false, usedDownloadFallback: false };
     }
-    downloadProject(json, `${safeFileName(document.project.title)}${PROJECT_FILE_EXTENSION}`, hostWindow.document);
+    downloadProject(projectBlob, `${safeFileName(projectTitle)}${PROJECT_FILE_EXTENSION}`, hostWindow.document);
     return { handle: null, cancelled: false, usedDownloadFallback: true };
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
@@ -55,12 +55,8 @@ export async function saveProjectDocument(
   }
 }
 
-export async function readProjectText(file: File): Promise<string> {
-  return file.text();
-}
-
-function downloadProject(json: string, name: string, document: Document): void {
-  const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+function downloadProject(blob: Blob, name: string, document: Document): void {
+  const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = name;

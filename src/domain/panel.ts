@@ -1,4 +1,4 @@
-import type { PageDefinition } from "./page";
+import { getPageMargins, type PageDefinition } from "./page";
 import type { PanelLabel } from "./labels";
 
 export interface PointMm {
@@ -30,6 +30,8 @@ export interface Panel {
 
 export const MAX_INITIAL_PANEL_SIDE_MM = 64;
 export const MIN_PANEL_SIDE_MM = 8;
+/** PowerPoint and DrawingML use 96 px/in as the default image-size reference. */
+export const POWERPOINT_REFERENCE_DPI = 96;
 
 export function roundMm(value: number): number {
   return Math.round(value * 1000) / 1000;
@@ -63,14 +65,33 @@ export function getInitialPanelSizeMm(
   };
 }
 
+export function getPowerPointReferenceSizeMm(
+  intrinsicWidthPx: number,
+  intrinsicHeightPx: number,
+): SizeMm {
+  if (
+    !Number.isFinite(intrinsicWidthPx)
+    || !Number.isFinite(intrinsicHeightPx)
+    || intrinsicWidthPx <= 0
+    || intrinsicHeightPx <= 0
+  ) {
+    throw new Error("PowerPoint scale references require positive intrinsic dimensions.");
+  }
+  return {
+    widthMm: roundMm(intrinsicWidthPx / POWERPOINT_REFERENCE_DPI * 25.4),
+    heightMm: roundMm(intrinsicHeightPx / POWERPOINT_REFERENCE_DPI * 25.4),
+  };
+}
+
 export function getDefaultImportAnchor(
   page: PageDefinition,
   panelIndex: number,
 ): PointMm {
+  const margins = getPageMargins(page);
   const offset = (panelIndex % 8) * 5;
   return {
-    xMm: page.marginMm + MAX_INITIAL_PANEL_SIDE_MM / 2 + offset,
-    yMm: page.marginMm + MAX_INITIAL_PANEL_SIDE_MM / 2 + offset,
+    xMm: margins.leftMm + MAX_INITIAL_PANEL_SIDE_MM / 2 + offset,
+    yMm: margins.topMm + MAX_INITIAL_PANEL_SIDE_MM / 2 + offset,
   };
 }
 

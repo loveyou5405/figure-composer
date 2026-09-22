@@ -1,4 +1,4 @@
-import type { PageDefinition } from "./page";
+import { getPageMargins, type PageDefinition } from "./page";
 import { roundMm, snapMm, type Panel, type PanelGeometry } from "./panel";
 
 export type AlignmentOperation = "left" | "horizontal-center" | "right" | "top" | "vertical-center" | "bottom";
@@ -132,15 +132,16 @@ export function alignSelectedPanels(
   if (selected.length < 2) return [...panels];
 
   if (target === "page") {
+    const margins = getPageMargins(page);
     const bounds = getCollectiveBounds(selected);
     let deltaX = 0;
     let deltaY = 0;
-    if (operation === "left") deltaX = page.marginMm - bounds.left;
+    if (operation === "left") deltaX = margins.leftMm - bounds.left;
     if (operation === "horizontal-center") deltaX = page.widthMm / 2 - bounds.centerX;
-    if (operation === "right") deltaX = page.widthMm - page.marginMm - bounds.right;
-    if (operation === "top") deltaY = page.marginMm - bounds.top;
+    if (operation === "right") deltaX = page.widthMm - margins.rightMm - bounds.right;
+    if (operation === "top") deltaY = margins.topMm - bounds.top;
     if (operation === "vertical-center") deltaY = page.heightMm / 2 - bounds.centerY;
-    if (operation === "bottom") deltaY = page.heightMm - page.marginMm - bounds.bottom;
+    if (operation === "bottom") deltaY = page.heightMm - margins.bottomMm - bounds.bottom;
     return moveSelectedPanels(panels, selectedPanelIds, deltaX, deltaY, page, { snapping: false }).panels;
   }
 
@@ -279,12 +280,13 @@ function findAxisSnap(
   toleranceMm: number,
   axis: "x" | "y",
 ): SnapCandidate | null {
+  const margins = getPageMargins(page);
   const moving = axis === "x"
     ? [bounds.left + delta, bounds.centerX + delta, bounds.right + delta]
     : [bounds.top + delta, bounds.centerY + delta, bounds.bottom + delta];
   const pagePairs = axis === "x"
-    ? [[moving[0], page.marginMm], [moving[1], page.widthMm / 2], [moving[2], page.widthMm - page.marginMm]]
-    : [[moving[0], page.marginMm], [moving[1], page.heightMm / 2], [moving[2], page.heightMm - page.marginMm]];
+    ? [[moving[0], margins.leftMm], [moving[1], page.widthMm / 2], [moving[2], page.widthMm - margins.rightMm]]
+    : [[moving[0], margins.topMm], [moving[1], page.heightMm / 2], [moving[2], page.heightMm - margins.bottomMm]];
   const candidates: SnapCandidate[] = pagePairs.map(([movingPosition, target]) => ({
     adjustment: target - movingPosition,
     positionMm: target,

@@ -1,10 +1,10 @@
 # UI Shell
 
 Module: UI Shell  
-Spec version: 1.4.0  
-Implementation status: Milestones 11 and 12 implemented  
-Last updated: 2026-09-18  
-Depends on: Canvas Preview
+Spec version: 2.0.0
+Implementation status: Milestones 11 and 12 plus web clipboard interaction implemented; native fidelity work deferred
+Last updated: 2026-09-22
+Depends on: Canvas Preview, Clipboard Import
 
 ## 1. Responsibility
 
@@ -12,7 +12,7 @@ Compose the top bar, functional left sidebar, dominant canvas, contextual inspec
 
 ## 2. User-facing behavior
 
-The top bar visibly identifies Figure Composer `v1.0` and exposes compact New/Open/Save/history actions plus `Page n / total`, Previous, Next, Add Page, and Export PPTX. The canvas remains the visual focus. Review is one existing sidebar tab with severity counts, focusable findings, and safe explicit fixes. Export shows the current review state, blocks errors, and allows warnings only through Export Anyway. Empty projects show a three-step onboarding cue and bundled three-page demo instead of another permanent toolbar.
+The top bar visibly identifies the current Figure Composer version and exposes compact New, Import Figure, Save, Save As, history actions, a Figure first-page selector, `Page n / total`, Previous, Next, Add Page, New Figure, and Export PPTX. Save produces one portable `.figproj`; Import Figure reads portable or legacy projects. A non-page caption below the canvas shows the active Figure and its local page position; it is not rendered into the A4 page or export. The canvas remains the visual focus. Review is one existing sidebar tab with severity counts, focusable findings, and safe explicit fixes. Export shows the current review state, blocks errors, and allows warnings only through Export Anyway. Empty projects show a three-step onboarding cue and bundled three-page demo instead of another permanent toolbar.
 
 ## 3. Data model
 
@@ -20,7 +20,7 @@ Shell state includes stable active page ID, selection, pending populated-page de
 
 ## 4. Public interfaces
 
-The React `App` delegates geometry/import/persistence/source/review behavior to domain and service modules. Browser inputs remain the fallback. In Tauri, the same actions use native Open/Save/Import/Replace/Export dialogs and preserve user-selected paths behind the platform adapter.
+The React `App` delegates geometry/import/persistence/source/review behavior to domain and service modules. Browser inputs remain the fallback. In Tauri, the same actions use native Import Figure/Save/asset Import/Replace/Export dialogs and preserve user-selected paths behind the platform adapter.
 
 ## 5. State transitions
 
@@ -63,11 +63,15 @@ Interaction checks additionally cover the export scope dialog, busy state, downl
 - Detected changes require an explicit Refresh command.
 - PPTX scope is chosen in a temporary dialog; export never creates a permanent settings panel.
 
-## 11. Known limitations
+## 11. Clipboard interaction
+
+Ctrl/Cmd+V routes through the web clipboard provider when focus is not inside an editable text control. A successful paste selects the new active-page Other panel and commits one Undo entry. Clipboard panels expose a compact collapsed `SOURCE QUALITY` section showing source/application, selected and canonical/preview formats, vector/lossless/lossy/fallback classification, known pixels and physical size, current displayed size, derived effective DPI for raster data, and whether preview conversion occurred. Advertised clipboard formats remain under a nested debug disclosure. Unknown values remain unknown, vector sources show DPI as N/A, and only bitmap-fallback quality triggers the non-blocking native-clipboard warning. Browser mode reports when no supported image representation is exposed and directs the user to Import files; it does not claim native EMF/WMF fidelity.
+
+## 12. Known limitations
 
 Thumbnails and cross-page drag are deferred; target-page collision avoidance is manual. Browser snapshot imports cannot be polled for later disk changes and folder relinking is not implemented. Native packages require platform toolchains and signing outside the source tree. Responsive small-window behavior is limited.
 
-## 12. Changelog
+## 13. Changelog
 
 - 0.1.0: Implemented Milestone 1 shell and page inspector.
 - 0.2.0: Added compact asset import/list UI and contextual single-panel inspector with deletion.
@@ -85,3 +89,9 @@ Thumbnails and cross-page drag are deferred; target-page collision avoidance is 
 - 1.2.0: Added compact Review findings, focus, safe fixes, status summary, and export gating.
 - 1.3.0: Added New/Duplicate shortcuts, native-dialog routing, three-step onboarding, and the bundled three-page demo.
 - 1.4.0: Added visible v1.0 identity, dirty-close protection, active-export shutdown gating, and persistent user-setting flush before native exit.
+- 1.5.0: Specified Ctrl/Cmd+V routing, one-transaction selection behavior, compact source-quality feedback, and explicit size-source choice for future clipboard import.
+- 1.6.0: Implemented web Ctrl/Cmd+V routing, one-panel active-page transactions, error feedback, Other typing, and compact source-quality/effective-DPI display.
+- 1.7.0: Added a collapsed clipboard source-diagnostics inspector with advertised formats, canonical/preview distinction, conversion state, strict quality classes, dynamic effective DPI, and non-fabricated unknowns.
+- 1.8.0: Renamed the selected-panel percentage control to `PPT scale` and aligned its value with generated PowerPoint picture scaling.
+- 1.9.0: Added New Figure, first-page Figure jumping, Figure-local page status below the canvas, and within-Figure page reorder boundaries.
+- 2.0.0: Renamed project Open to Import Figure and added portable packing/opening status for single-file embedded-asset projects.

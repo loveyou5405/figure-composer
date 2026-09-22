@@ -1,9 +1,9 @@
 # Panel Labels
 
 Module: Panel Labels  
-Spec version: 0.2.2  
+Spec version: 0.3.0
 Implementation status: Milestone 5 implemented  
-Last updated: 2026-09-16  
+Last updated: 2026-09-22
 Depends on: Project Model, Layout Engine, Canvas Preview
 
 ## 1. Responsibility
@@ -12,7 +12,7 @@ Own deterministic alphabetic sequences, geometry-based reading order, explicit r
 
 ## 2. User-facing behavior
 
-`Auto Label Page` assigns A/B/C from top to bottom and left to right. `Auto Label Selection` applies the same logic only to the selected subset. Labels remain attached during every panel layout operation and never change merely because the panel moves or resizes. Editing text marks it manual. Hidden labels retain their text but do not render or participate in automatic major-panel sequencing.
+`Auto Label Page` assigns letters from top to bottom and left to right, continuing from preceding pages in the same Figure. `Auto Label Selection` starts at A for only the selected subset. `New Figure` establishes a new sequence boundary, so its first automatic page label starts at A. Labels remain attached during every panel layout operation and never change merely because the panel moves or resizes. Editing text marks it manual. Hidden labels retain their text but do not render or participate in automatic major-panel sequencing.
 
 ## 3. Data model
 
@@ -23,9 +23,10 @@ The panel's top-left corner is the reference anchor. The label's lower-left anch
 ## 4. Public interfaces
 
 - `alphabeticLabel(index)` generates A…Z, AA, AB, and beyond.
-- `getPanelReadingOrder(panels, toleranceMm)` excludes hidden labels, groups top coordinates into rows using an inclusive tolerance, orders rows by top Y, then orders each row by X.
+- `getPanelReadingOrder(panels, toleranceMm)` excludes hidden labels, groups panels whose top, image center, or label anchor shares a row within an inclusive tolerance, orders rows by top Y, then orders each row by X.
 - `autoLabelPanels` labels a page or explicit panel-ID subset and accepts preserve/replace manual policy.
-- `autoLabelOrderedPages` supports continuous and restart-per-page project sequencing over ordered pages.
+- `getPageLabelStartIndex` derives the first automatic slot from preceding pages in the same Figure.
+- `autoLabelOrderedPages` supports continuous-within-Figure and restart-per-page sequencing over ordered pages.
 - Label update helpers distinguish manual text from automatic generation and manual offsets from project-managed offsets.
 - `getPanelLabelBoundsMm` and `getLabelValidationWarnings` expose deterministic geometry and warning hooks.
 
@@ -37,9 +38,11 @@ The deterministic preserve policy is positional: every visible eligible panel co
 
 Changing project defaults does not silently move labels. The UI offers `Apply to automatic labels`, which commits the new project default and reapplies it only to labels whose `offsetMode` remains automatic, or `Future automatic labels only`, which changes the project default without moving existing labels. Manually positioned labels are protected in both cases.
 
+The page-level Label settings editor identifies these values as defaults, explains the signed X/Y directions, and keeps the preview unchanged until the user chooses an application scope. Selecting exactly one panel exposes its own position editor by default; edits there apply immediately, mark only that panel's offset as manual, and can be reset to the current project default.
+
 ## 6. Reading-order determinism
 
-Candidates sort by top Y, then X, width, and height. A row is anchored to its first/topmost member; another candidate joins when its top Y is within the inclusive tolerance. Rows sort top-to-bottom and their members left-to-right. IDs, filenames, asset names, DOM order, and import order are not ordering keys. Exactly congruent panels have indistinguishable geometry; their relative sequence is intentionally unspecified until one is moved.
+Candidates sort by top Y, then X, width, and height. A row is anchored to its first/topmost member; another candidate joins when its top Y, image-center Y, or label-anchor Y is within the inclusive tolerance. This supports both legacy center-aligned rows and label-aligned rows without depending on the current label text. Rows sort top-to-bottom and their members left-to-right. IDs, filenames, asset names, DOM order, and import order are not ordering keys. Exactly congruent panels have indistinguishable geometry; their relative sequence is intentionally unspecified until one is moved.
 
 ## 7. Edge cases
 
@@ -59,7 +62,7 @@ Test A/Z/AA transitions, row clustering and tolerance boundaries, input-order in
 
 ## 11. Acceptance criteria
 
-Explicit auto labeling is deterministic; manual labels survive by default; hidden labels are excluded; movement never relabels; panel layout ignores labels; typography is project-level; and canonical placement remains millimeter-based at every zoom.
+Explicit auto labeling is deterministic; manual labels survive by default; hidden labels are excluded; movement never relabels; Auto Layout includes visible label bounds in each panel's packing footprint; typography is project-level; and canonical placement remains millimeter-based at every zoom.
 
 ## 12. Known limitations
 
@@ -71,3 +74,6 @@ Order preview, direct label dragging, collision solving, per-label typography ov
 - 0.2.0: Implemented panel-attached labels, deterministic ordering/sequences, manual preservation, visibility, project styles, multi-page policies, and validation hooks.
 - 0.2.1: Changed the default offset to -2 mm / -2 mm, defined outside-panel lower-left anchoring, and added explicit existing/future automatic-offset application choices.
 - 0.2.2: Replaced free-text font entry with Arial and Times New Roman project-level choices.
+- 0.2.3: Clarified default versus per-panel offsets, signed X/Y directions, millimeter units, and the explicit application state in the inspector.
+- 0.2.4: Made reading-order row detection robust to top-, image-center-, and label-anchor-aligned panels after label visibility changes.
+- 0.3.0: Scoped continuous automatic sequences to each Figure and restarted new Figures at A.

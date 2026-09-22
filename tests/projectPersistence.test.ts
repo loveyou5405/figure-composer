@@ -37,7 +37,7 @@ function documentWithPanel(): EditorDocument {
     assetId: asset.id,
     typeId: "wb",
     presetId: "preset-wb",
-    baseSizeMm: { widthMm: 64, heightMm: 32 },
+    baseSizeMm: { widthMm: 317.5, heightMm: 158.75 },
     geometry: { xMm: 18, yMm: 25, widthMm: 32, heightMm: 16 },
     aspectRatioLocked: true,
     manualScaleOverride: false,
@@ -67,11 +67,84 @@ describe("versioned .figproj persistence", () => {
     expect(loaded.assets[0]).toMatchObject({ id: asset.id, previewUrl: "", missing: true });
   });
 
+  it("loads legacy projects without Figure IDs as one continuous Figure", () => {
+    const source = documentWithPanel();
+    const parsed = JSON.parse(serializeProjectFile(source));
+    parsed.project.pages.forEach((page: Record<string, unknown>) => { delete page.figureId; });
+    const loaded = deserializeProjectFile(JSON.stringify(parsed));
+    const figureIds = new Set(loaded.project.pages.map((page) => page.figureId));
+    expect(figureIds.size).toBe(1);
+    expect([...figureIds][0]).toBeTruthy();
+  });
+
+  it("rejects a present but invalid Figure ID instead of treating it as legacy", () => {
+    const parsed = JSON.parse(serializeProjectFile(documentWithPanel()));
+    parsed.project.pages[0].figureId = 123;
+    expect(() => deserializeProjectFile(JSON.stringify(parsed))).toThrow(/Figure ID is invalid/);
+  });
+
   it("reattaches an available non-destructive source by stable metadata", () => {
     const source = documentWithPanel();
     const loaded = deserializeProjectFile(serializeProjectFile(source), [asset]);
     expect(loaded.assets[0].previewUrl).toBe("blob:live-preview");
     expect(loaded.assets[0].missing).toBe(false);
+  });
+
+  it("normalizes legacy fixed panel bases to the PowerPoint 96 DPI scale reference", () => {
+    const source = documentWithPanel();
+    const parsed = JSON.parse(serializeProjectFile(source));
+    parsed.project.pages[1].panels[0].baseSizeMm = { widthMm: 64, heightMm: 32 };
+    const loaded = deserializeProjectFile(JSON.stringify(parsed));
+    expect(loaded.project.pages[1].panels[0].baseSizeMm).toEqual({ widthMm: 317.5, heightMm: 158.75 });
+    expect(loaded.project.pages[1].panels[0].geometry).toEqual(source.project.pages[1].panels[0].geometry);
+  });
+
+  it("round-trips clipboard provenance and quality metadata", () => {
+    const source = documentWithPanel();
+    const clipboardAsset: ImportedAsset = {
+      ...asset,
+      sourceKind: "clipboard",
+      sourceApplication: "PowerPoint",
+      canonicalFormat: "tiff",
+      isVector: false,
+      isLosslessRaster: true,
+      qualityClass: "lossless-raster",
+      physicalSizeSource: "clipboard",
+      clipboardDiagnostics: {
+        availableFormats: ["image/tiff", "image/png"],
+        selectedFormat: "tiff",
+        qualityClass: "lossless-raster",
+        pixelWidth: 1200,
+        pixelHeight: 600,
+        physicalWidthMm: 52,
+        physicalHeightMm: 26,
+        previewConverted: true,
+        canonicalFormat: "tiff",
+        previewFormat: "png",
+      },
+    };
+    const loaded = deserializeProjectFile(serializeProjectFile({ ...source, assets: [clipboardAsset] }));
+    expect(loaded.assets[0]).toMatchObject({
+      sourceKind: "clipboard",
+      sourceApplication: "PowerPoint",
+      canonicalFormat: "tiff",
+      isVector: false,
+      isLosslessRaster: true,
+      qualityClass: "lossless-raster",
+      physicalSizeSource: "clipboard",
+      clipboardDiagnostics: {
+        availableFormats: ["image/tiff", "image/png"],
+        selectedFormat: "tiff",
+        qualityClass: "lossless-raster",
+        pixelWidth: 1200,
+        pixelHeight: 600,
+        physicalWidthMm: 52,
+        physicalHeightMm: 26,
+        previewConverted: true,
+        canonicalFormat: "tiff",
+        previewFormat: "png",
+      },
+    });
   });
 
   it("rejects unsupported schema versions and accepts an explicit migration chain", () => {
@@ -118,23 +191,25 @@ describe("versioned .figproj persistence", () => {
   });
 
   it("reuses an existing writable file handle for Save", async () => {
-    let written = "";
+    let written: Blob | string | null = null;
     let closed = false;
     const handle: ProjectFileHandle = {
       name: "Figure.figproj",
       createWritable: async () => ({
-        write: async (value) => { written = String(value); },
+        write: async (value) => { written = value; },
         close: async () => { closed = true; },
       }),
     };
+    const projectBlob = new Blob(["portable-project"], { type: "application/octet-stream" });
     const result = await saveProjectDocument(
-      documentWithPanel(),
+      projectBlob,
+      "Figure",
       handle,
       false,
       { document: {} } as FilePickerWindow,
     );
     expect(result).toEqual({ handle, cancelled: false, usedDownloadFallback: false });
-    expect(JSON.parse(written).schemaVersion).toBe(PROJECT_SCHEMA_VERSION);
+    expect(written).toBe(projectBlob);
     expect(closed).toBe(true);
   });
 });

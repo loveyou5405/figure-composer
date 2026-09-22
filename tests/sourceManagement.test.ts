@@ -105,8 +105,8 @@ describe("source replacement geometry", () => {
     const source = documentWithPanel();
     const replaced = replacePanelSource(source, "panel-1", replacementAsset(600, 600), "reapply-preset");
     const panel = replaced.project.pages[0].panels[0];
-    expect(panel.geometry.widthMm).toBe(32);
-    expect(panel.geometry.heightMm).toBe(32);
+    expect(panel.geometry.widthMm).toBe(79.375);
+    expect(panel.geometry.heightMm).toBe(79.375);
     expect(panel.manualScaleOverride).toBe(false);
     expect(panel.typeId).toBe("wb");
     expect(panel.label.text).toBe("A");

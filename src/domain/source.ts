@@ -1,6 +1,6 @@
 import type { ImportedAsset } from "./asset";
 import type { EditorDocument } from "./editorDocument";
-import { getInitialPanelSizeMm, roundMm, type Panel, type PanelGeometry } from "./panel";
+import { getPowerPointReferenceSizeMm, roundMm, type Panel, type PanelGeometry } from "./panel";
 import { applyPresetToPanel, type PanelPreset } from "./preset";
 
 export type SourceSizingMode = "preserve-width" | "reapply-preset";
@@ -114,7 +114,7 @@ function updatePanelForSource(
   page: Parameters<typeof applyPresetToPanel>[3],
   assetId = source.id,
 ): Panel {
-  const baseSizeMm = getInitialPanelSizeMm(source.intrinsicWidthPx, source.intrinsicHeightPx);
+  const baseSizeMm = getPowerPointReferenceSizeMm(source.intrinsicWidthPx, source.intrinsicHeightPx);
   const withSource = { ...panel, assetId, baseSizeMm };
   if (sizingMode === "reapply-preset") {
     return applyPresetToPanel(withSource, panel.typeId, preset, page);

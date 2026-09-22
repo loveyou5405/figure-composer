@@ -1,10 +1,10 @@
 # Validation
 
 Module: Validation  
-Spec version: 1.0.0  
-Implementation status: Milestone 11 implemented  
-Last updated: 2026-09-17  
-Depends on: Project Model, Panel Presets, Panel Labels
+Spec version: 1.3.0
+Implementation status: Milestone 11 and web clipboard quality review implemented; native clipboard formats deferred
+Last updated: 2026-09-22
+Depends on: Project Model, Panel Presets, Panel Labels, Clipboard Import
 
 ## 1. Responsibility
 
@@ -20,7 +20,7 @@ Each finding has a stable code, severity, affected entity IDs, human explanation
 
 ## 4. Public interfaces
 
-`reviewDocument` accepts an immutable editor snapshot plus optional source-check results and returns stable, severity-sorted findings. `summarizeReview` derives Error/Warning/Info counts. Checks cover structural ownership, page and safe-margin bounds, near-edge placement, panel overlap, label collision/outside/duplicate/missing/manual states, preset deviation, manual scale overrides, same-type scale inconsistency, missing or changed sources, TIFF fallback, and effective raster DPI. Raster thresholds are 300 DPI OK, 200–299 warning, and below 200 strong warning.
+`reviewDocument` accepts an immutable editor snapshot plus optional source-check results and returns stable, severity-sorted findings. `summarizeReview` derives Error/Warning/Info counts. Checks cover structural Figure/page ownership and Figure contiguity, page and safe-margin bounds, near-edge placement, panel overlap, label collision/outside/duplicate/missing/manual states, preset deviation, manual scale overrides, same-type scale inconsistency, missing or changed sources, TIFF fallback, and effective raster DPI. Raster thresholds are 300 DPI OK, 200–299 warning, and below 200 strong warning.
 
 ## 5. State transitions
 
@@ -44,13 +44,17 @@ Test every warning threshold and boundary, including exactly-one-page ownership,
 
 ## 10. Acceptance criteria
 
-Outside-page, safe-margin, inconsistent-scale, and low-resolution checks work and never silently alter geometry.
+Outside-page, image/label safe-margin, label-collision, inconsistent-scale, and low-resolution checks work and never silently alter geometry.
 
-## 11. Known limitations
+## 11. Clipboard quality review
+
+The selected-panel inspector classifies clipboard sources as Vector, lossless/lossy format plus effective DPI, or Bitmap fallback. Review emits explicit bitmap-fallback and lossy-source findings. Effective DPI remains a calculation from pixel dimensions and displayed millimeters, never an inference from the TIFF/PNG/JPEG extension. Vector sources omit raster DPI, while unknown metadata yields informational uncertainty rather than fabricated precision.
+
+## 12. Known limitations
 
 The Review panel does not perform destructive bulk repair, infer scientific correctness, or estimate DPI for SVG. Collision findings are geometric and do not inspect transparent image pixels.
 
-## 12. Changelog
+## 13. Changelog
 
 - 0.1.0: Initial planned contract.
 - 0.2.0: Added the shared tolerant preset-consistency predicate contract.
@@ -58,3 +62,6 @@ The Review panel does not perform destructive bulk repair, infer scientific corr
 - 0.4.0: Documented normalized batch layout geometry and equal-size override validation behavior.
 - 0.5.0: Added warning hooks for duplicate/missing visible labels, outside-page label geometry, and manual overrides.
 - 1.0.0: Added deterministic unified findings, DPI/source/collision checks, severity summaries, compact focusable Review UI, safe one-click fixes, and export review gating.
+- 1.1.0: Added the planned clipboard quality taxonomy and format-independent effective-DPI rules.
+- 1.2.0: Implemented clipboard quality metadata display plus bitmap-fallback warning and lossy-raster information findings.
+- 1.3.0: Added required page Figure ownership and contiguous Figure-group structural validation.

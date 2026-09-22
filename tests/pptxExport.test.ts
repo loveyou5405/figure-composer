@@ -4,7 +4,7 @@ import type { ImportedAsset } from "../src/domain/asset";
 import { createInitialEditorDocument, type EditorDocument } from "../src/domain/editorDocument";
 import { createDefaultPanelLabel } from "../src/domain/labels";
 import type { Panel } from "../src/domain/panel";
-import { appendA4Page, updateProjectPagePanels } from "../src/domain/project";
+import { appendA4Page, appendNewFigure, updateProjectPagePanels } from "../src/domain/project";
 import {
   A4_HEIGHT_EMU,
   A4_WIDTH_EMU,
@@ -71,6 +71,17 @@ function twoPageDocument(): EditorDocument {
   };
 }
 
+function multiFigureDocument(): EditorDocument {
+  const source = twoPageDocument();
+  const project = appendNewFigure(source.project, "page-3", "figure-2");
+  return {
+    ...source,
+    project: updateProjectPagePanels(project, "page-3", () => [
+      panel("panel-c", "page-3", "asset-png", "A", 22, 28),
+    ]),
+  };
+}
+
 describe("PPTX export planning", () => {
   it("uses direct deterministic millimeter conversions for A4", () => {
     expect(mmToInches(25.4)).toBe(1);
@@ -83,6 +94,19 @@ describe("PPTX export planning", () => {
     const source = twoPageDocument();
     const plan = buildPptxExportPlan(source, { scope: "all", activePageId: source.project.pages[0].id });
     expect(plan.slides.map((slide) => slide.pageId)).toEqual([source.project.pages[0].id, "page-2"]);
+  });
+
+  it("exports every Figure into one ordered deck and restarts Figure-local page numbers", () => {
+    const source = multiFigureDocument();
+    const plan = buildPptxExportPlan(source, {
+      scope: "all",
+      activePageId: source.project.pages[0].id,
+    });
+    expect(plan.slides.map((slide) => [slide.figureNumber, slide.figurePageNumber, slide.pageId])).toEqual([
+      [1, 1, source.project.pages[0].id],
+      [1, 2, "page-2"],
+      [2, 1, "page-3"],
+    ]);
   });
 
   it("can export only the active page", () => {
@@ -159,5 +183,24 @@ describe("PPTX package generation", () => {
     expect(slide1).toContain(`<a:ext cx=\"${40 * EMU_PER_MILLIMETER}\" cy=\"${20 * EMU_PER_MILLIMETER}\"/>`);
     expect(slide2).toContain("<a:t>β</a:t>");
     expect(Object.keys(zip.files).some((path) => /^ppt\/media\/.*\.svg$/i.test(path))).toBe(true);
+  });
+
+  it("writes pages from multiple Figures into the same PowerPoint package", async () => {
+    const source = multiFigureDocument();
+    const result = await exportPptx(
+      source,
+      { scope: "all", activePageId: source.project.pages[0].id, fileName: "All figures" },
+      async (item) => item.kind === "svg" ? simpleSvg : tinyPng,
+    );
+    const zip = await JSZip.loadAsync(await result.blob.arrayBuffer());
+    expect(zip.file("ppt/slides/slide1.xml")).not.toBeNull();
+    expect(zip.file("ppt/slides/slide2.xml")).not.toBeNull();
+    expect(zip.file("ppt/slides/slide3.xml")).not.toBeNull();
+    expect(await zip.file("ppt/slides/slide1.xml")!.async("text")).not.toContain("Figure 1");
+    expect(await zip.file("ppt/slides/slide3.xml")!.async("text")).not.toContain("Figure 2");
+    expect(buildPptxExportPlan(source, {
+      scope: "all",
+      activePageId: source.project.pages[0].id,
+    }).slides.map((slide) => slide.figureNumber)).toEqual([1, 1, 2]);
   });
 });

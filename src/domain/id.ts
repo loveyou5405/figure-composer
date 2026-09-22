@@ -1,6 +1,6 @@
 let fallbackSequence = 0;
 
-export function createStableId(prefix: "project" | "page" | "asset" | "panel" | "type" | "preset"): string {
+export function createStableId(prefix: "project" | "figure" | "page" | "asset" | "panel" | "type" | "preset"): string {
   const uuid = globalThis.crypto?.randomUUID?.();
   if (uuid) return `${prefix}-${uuid}`;
 

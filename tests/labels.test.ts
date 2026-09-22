@@ -9,6 +9,7 @@ import {
   getLabelValidationWarnings,
   getPanelLabelBoundsMm,
   getPanelReadingOrder,
+  getPageLabelStartIndex,
   updatePanelLabelText,
   updatePanelLabelOffset,
   updatePanelLabelVisibility,
@@ -106,6 +107,17 @@ describe("explicit auto labeling", () => {
     expect(labels(autoLabelPanels(input))).toEqual(["A", "", "B"]);
   });
 
+  it("keeps center-aligned panels in left-to-right order after a label is hidden", () => {
+    const input = [
+      panel("a", 10, 10),
+      updatePanelLabelVisibility(panel("hidden", 40, 10), false),
+      panel("c", 10, 40, "page-1", 20, 20),
+      panel("d", 40, 30, "page-1", 20, 40),
+    ];
+    const result = autoLabelPanels(input);
+    expect(labels(result)).toEqual(["A", "", "B", "C"]);
+  });
+
   it("creates manual overrides and preserves them by default", () => {
     const input = [panel("a", 10, 10), updatePanelLabelText(panel("b", 40, 10), "C1"), panel("c", 70, 10)];
     const result = autoLabelPanels(input);
@@ -136,6 +148,20 @@ describe("multi-page sequence modes", () => {
     const result = autoLabelOrderedPages(pages, { ...DEFAULT_LABEL_SETTINGS, sequenceMode: "restart-per-page" });
     expect(labels(result[0].panels)).toEqual(["A", "B"]);
     expect(labels(result[1].panels)).toEqual(["A", "B"]);
+  });
+
+  it("continues across pages in one figure and restarts at a new figure", () => {
+    const figurePages = [
+      { ...pages[0], figureId: "figure-1" },
+      { ...pages[1], figureId: "figure-1" },
+      { id: "page-3", figureId: "figure-2", definition: A4_PORTRAIT, panels: [panel("e", 10, 10, "page-3")] },
+    ];
+    const result = autoLabelOrderedPages(figurePages, DEFAULT_LABEL_SETTINGS);
+    expect(labels(result[0].panels)).toEqual(["A", "B"]);
+    expect(labels(result[1].panels)).toEqual(["C", "D"]);
+    expect(labels(result[2].panels)).toEqual(["A"]);
+    expect(getPageLabelStartIndex(figurePages, "page-2", DEFAULT_LABEL_SETTINGS)).toBe(2);
+    expect(getPageLabelStartIndex(figurePages, "page-3", DEFAULT_LABEL_SETTINGS)).toBe(0);
   });
 });
 

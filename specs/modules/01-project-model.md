@@ -1,10 +1,10 @@
 # Project Model
 
 Module: Project Model  
-Spec version: 1.1.0  
+Spec version: 1.6.0
 Implementation status: Milestone 10 implemented  
-Last updated: 2026-09-17  
-Depends on: ADR-002 Coordinate System, ADR-004 Multi-page document ownership, ADR-006 Source Binding and Refresh
+Last updated: 2026-09-22
+Depends on: ADR-002 Coordinate System, ADR-004 Multi-page document ownership, ADR-006 Source Binding and Refresh, Clipboard Import
 
 ## 1. Responsibility
 
@@ -12,21 +12,21 @@ Own canonical, serializable project state and invariants shared by preview, edit
 
 ## 2. User-facing behavior
 
-A new project opens with Page 1 as an A4 portrait page, 12 mm margins, a 1 mm grid, snapping enabled, default panel types, and editable presets. A project may own any ordered number of independent A4 pages. Imported files create independently typed selectable panel objects on the active page. View-only changes such as active-page navigation or zoom do not alter project or panel geometry.
+A new project opens with Figure 1, Page 1 as an A4 portrait page, 12 mm margins, a 1 mm grid, snapping enabled, default panel types, and editable presets. A project may own any ordered number of Figures, each containing one or more independent A4 pages. Imported files create independently typed selectable panel objects on the active page. View-only changes such as active-page/Figure navigation or zoom do not alter project or panel geometry.
 
 ## 3. Data model
 
-`FigureProject` owns an ordered `pages` collection. Every `FigurePage` has a stable ID, display name, immutable A4 `PageDefinition`, and its own ordered `panels` collection. A `Panel` carries the matching `pageId` as an explicit reference and must occur in exactly one owning page. Its `PanelGeometry` is always page-local; there is no canonical global or vertically concatenated canvas coordinate system.
+`FigureProject` owns an ordered `pages` collection. Contiguous pages sharing a stable `figureId` form one Figure. Every `FigurePage` has stable page and Figure IDs, a global display name, immutable A4 `PageDefinition`, and its own ordered `panels` collection. A `Panel` carries the matching `pageId` as an explicit reference and must occur in exactly one owning page. Its `PanelGeometry` is always page-local; there is no canonical global or vertically concatenated canvas coordinate system.
 
-The immutable `PageDefinition` owns `widthMm`, `heightMm`, `marginMm`, and `gridMm`. `EditorDocument` is the history/persistence aggregate around the project plus project-scoped assets, panel type definitions, presets, and Auto Layout preferences. An `ImportedAsset` has a stable ID, filename/size/modified-time fingerprint, supported kind, intrinsic dimensions, a session-local preview URL, and an explicit missing-source state. A `Panel` also has stable IDs for itself, its asset, type, and preset; a stable `baseSizeMm`; inherited aspect-lock state; explicit manual-override intent; optional bounded `layoutScaleFactor`; and one attached `PanelLabel`. Label text, auto/manual intent, visibility, signed millimeter offsets from the panel top-left anchor, and automatic/manual offset intent are panel metadata. All authoritative geometry fields use millimeters.
+The immutable `PageDefinition` owns `widthMm`, `heightMm`, per-edge `marginsMm`, the legacy uniform `marginMm` fallback, and `gridMm`. `EditorDocument` is the history/persistence aggregate around the project plus project-scoped assets, panel type definitions, presets, and Auto Layout preferences. An `ImportedAsset` has a stable ID, filename/size/modified-time fingerprint, supported kind, intrinsic dimensions, a session-local preview URL, and an explicit missing-source state. A `Panel` also has stable IDs for itself, its asset, type, and preset; a stable `baseSizeMm`; inherited aspect-lock state; explicit manual-override intent; optional bounded `layoutScaleFactor`; and one attached `PanelLabel`. Label text, auto/manual intent, visibility, signed millimeter offsets from the panel top-left anchor, and automatic/manual offset intent are panel metadata. All authoritative geometry fields use millimeters.
 
 ## 4. Public interfaces
 
-`A4_PORTRAIT` is the per-page format contract. `createInitialProject` creates Page 1; `appendA4Page`, `deleteProjectPage`, `duplicateProjectPage`, and `reorderProjectPage` own page lifecycle/order. `movePanelsToPage` transfers one active-page selection while preserving identity and relative geometry. `replacePanelSource` changes one selected panel to a new independently identified asset; `refreshAssetSource` updates every panel referencing one logical asset while preserving that asset ID; `relinkAssetSource` restores a missing logical asset without changing panel geometry. `geometryPreservingWidthAndCenter` provides the deterministic default for changed aspect ratios. `getProjectOwnershipErrors` validates structural invariants. PPTX export reads this immutable aggregate and never writes export-only geometry back into the model.
+`A4_PORTRAIT` is the per-page format contract. `createInitialProject` creates Figure 1/Page 1; `appendPageToFigure` adds a page after the last page of one Figure; `appendNewFigure` creates a new Figure and first page; `deleteProjectPage`, `duplicateProjectPage`, and `reorderProjectPage` own remaining page lifecycle/order. `getProjectFigures` derives ordered Figure groups. `movePanelsToPage` transfers one active-page selection while preserving identity and relative geometry. `getProjectOwnershipErrors` validates structural and contiguous-Figure invariants. PPTX export reads this immutable aggregate and never writes export-only geometry back into the model.
 
 ## 5. State transitions
 
-Import registers one asset and one panel per accepted file on the active page. Selection is active-page viewport state. Replace keeps panel ID/page/type/preset/label/order and either preserves displayed width and center while recalculating height or explicitly reapplies the current preset. Refresh keeps the logical asset ID and applies the same sizing rule to every reference. Relink keeps exact panel geometry and metadata. Add appends a stable empty A4 page. Duplicate inserts a copy immediately after its source with a new stable page ID and new panel IDs while reusing immutable asset references. Delete keeps at least one page and removes unreferenced asset records only after confirmation for populated pages. Reorder changes the page array and normalized display names without changing page IDs or panel ownership. Auto Layout preserves current page order and may append pages. Zoom, active page, selection, guides, and source-check results remain viewport state only.
+Import registers one asset and one panel per accepted file on the active page. Selection is active-page viewport state. Replace, Refresh, and Relink keep their existing non-destructive identity rules. Add Page inserts a stable empty A4 page after the last page of the active Figure. New Figure appends a new Figure with one empty page. Duplicate stays in its source Figure. Delete keeps at least one project page; deleting the last page of a Figure removes that derived Figure group. Reorder is limited to pages inside one Figure. Auto Layout preserves Figure boundaries and may add overflow pages to the owning Figure. Zoom, active page, selection, guides, and source-check results remain viewport state only.
 
 ## 6. Edge cases
 
@@ -38,7 +38,7 @@ Invalid stored data must produce a clear load error and must not partially repla
 
 ## 8. Persistence requirements
 
-The `.figproj` format is human-readable JSON using schema `0.1.0` with an ordered `pages` array. Each serialized page contains its own panel array, and every panel includes `pageId` plus page-local millimeter geometry. Asset fingerprints and source hints are serialized, while browser object URLs, source bytes, `File` objects, selection, active page, zoom, guides, and history are session-only. Loading validates the complete document before replacing active state. Missing source previews preserve the asset record and every referencing panel.
+The `.figproj` format is a ZIP-compatible portable container using container version `1.0.0`. It contains a human-readable `project.json` document using schema `0.1.0` plus exact original source bytes under `assets/`. Each serialized page contains its `figureId` and panel array, and every panel includes `pageId` plus page-local millimeter geometry. Asset fingerprints, source hints, and available clipboard diagnostics are serialized, while browser object URLs, selection, active page, zoom, guides, and history are session-only. Embedded files are stored without lossy image conversion and verified by byte size plus SHA-256 before the loaded document replaces active state. Legacy JSON `.figproj` files remain readable but require available source files before they can be saved as complete portable projects. Clipboard diagnostics preserve advertised and selected formats, canonical/preview separation, quality class, conversion state, and only dimensions actually reported or decoded; selected canonical clipboard bytes are embedded rather than generated previews.
 
 ## 9. Testing requirements
 
@@ -78,3 +78,8 @@ Cross-page dragging is not implemented; users move selections through explicit t
 - 0.9.0: Added page lifecycle/order operations, unique page duplication, safe group-preserving cross-page movement, and history-ready immutable page transactions.
 - 1.0.0: Added deterministic Replace/Refresh/Relink transformations, source fingerprints, stable shared-asset refresh, exact-layout relinking, and history-ready source transactions.
 - 1.1.0: Confirmed the immutable editor aggregate as the only PPTX export input and retained schema `0.1.0` with no export-only state.
+- 1.2.0: Reserved canonical-source, preview, clipboard provenance, quality, and physical-size metadata for the planned portable asset model.
+- 1.3.0: Persisted browser clipboard source diagnostics while keeping unavailable metadata unknown and effective DPI derived from current panel geometry.
+- 1.4.0: Defined `baseSizeMm` as the PowerPoint 96 DPI scale reference and normalized legacy saved bases on load without changing panel geometry.
+- 1.5.0: Added contiguous Figure ownership, Add Page/New Figure semantics, within-Figure reordering, and backward-compatible legacy Figure normalization.
+- 1.6.0: Implemented single-file portable `.figproj` ownership of exact source bytes with manifest integrity verification and legacy JSON compatibility.

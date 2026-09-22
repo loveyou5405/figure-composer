@@ -1,9 +1,17 @@
 import { createStableId } from "./id";
+import {
+  DEFAULT_LABEL_SETTINGS,
+  getPanelLayoutFootprintMm,
+  getPanelVisualBoundsMm,
+  type PanelLayoutFootprint,
+  type ProjectLabelSettings,
+} from "./labels";
 import { getCollectiveBounds } from "./layout";
-import type { PageDefinition } from "./page";
+import { getPageMargins, type PageDefinition } from "./page";
 import { roundMm, type Panel, type PanelGeometry } from "./panel";
 import {
   createA4Page,
+  getProjectFigures,
   type FigurePage,
   type FigureProject,
 } from "./project";
@@ -32,6 +40,7 @@ export interface AutoLayoutScoreBreakdown {
   readonly rowHeightVariation: number;
   readonly rowCountVariation: number;
   readonly orphanRow: number;
+  readonly avoidableRowBreaks: number;
   readonly usedHeight: number;
   readonly movement: number;
   readonly scaling: number;
@@ -104,12 +113,26 @@ interface PartitionState {
   readonly usedHeightMm: number;
 }
 
+interface LayoutFootprint extends PanelLayoutFootprint {
+  readonly imageWidthMm: number;
+  readonly imageHeightMm: number;
+  readonly labelAnchorOffsetMm: number | null;
+}
+
+interface RowAlignmentMetrics {
+  readonly imageTopOffsetsMm: ReadonlyMap<number, number>;
+  readonly topMm: number;
+  readonly bottomMm: number;
+  readonly heightMm: number;
+}
+
 interface ScoreWeights {
   readonly unusedHorizontalSpace: number;
   readonly rowWidthImbalance: number;
   readonly rowHeightVariation: number;
   readonly rowCountVariation: number;
   readonly orphanRow: number;
+  readonly avoidableRowBreaks: number;
   readonly usedHeight: number;
   readonly movement: number;
   readonly scaling: number;
@@ -122,6 +145,7 @@ const SCORE_WEIGHTS: Record<AutoLayoutMode, ScoreWeights> = Object.freeze({
     rowHeightVariation: 0.4,
     rowCountVariation: 0.5,
     orphanRow: 30,
+    avoidableRowBreaks: 0,
     usedHeight: 0.2,
     movement: 0.1,
     scaling: 25,
@@ -132,6 +156,7 @@ const SCORE_WEIGHTS: Record<AutoLayoutMode, ScoreWeights> = Object.freeze({
     rowHeightVariation: 0.2,
     rowCountVariation: 0.2,
     orphanRow: 12,
+    avoidableRowBreaks: 100,
     usedHeight: 2.5,
     movement: 0.05,
     scaling: 25,
@@ -142,6 +167,7 @@ const SCORE_WEIGHTS: Record<AutoLayoutMode, ScoreWeights> = Object.freeze({
     rowHeightVariation: 0.5,
     rowCountVariation: 6,
     orphanRow: 25,
+    avoidableRowBreaks: 0,
     usedHeight: 0.3,
     movement: 0.05,
     scaling: 25,
@@ -149,11 +175,12 @@ const SCORE_WEIGHTS: Record<AutoLayoutMode, ScoreWeights> = Object.freeze({
 });
 
 export function getSafeLayoutRegion(page: PageDefinition): LayoutRegion {
+  const margins = getPageMargins(page);
   return {
-    xMm: page.marginMm,
-    yMm: page.marginMm,
-    widthMm: roundMm(page.widthMm - page.marginMm * 2),
-    heightMm: roundMm(page.heightMm - page.marginMm * 2),
+    xMm: margins.leftMm,
+    yMm: margins.topMm,
+    widthMm: roundMm(page.widthMm - margins.leftMm - margins.rightMm),
+    heightMm: roundMm(page.heightMm - margins.topMm - margins.bottomMm),
   };
 }
 
@@ -161,19 +188,20 @@ export function generateAutoLayoutCandidates(
   panels: readonly Panel[],
   region: LayoutRegion,
   settings: Partial<AutoLayoutSettings> = {},
+  labelSettings: ProjectLabelSettings = DEFAULT_LABEL_SETTINGS,
 ): AutoLayoutCandidate[] {
   if (panels.length === 0) return [];
   const resolved = resolveSettings(settings);
   validateRegion(region);
 
-  const unscaled = generateCandidatesAtScale(panels, region, resolved, 1);
+  const unscaled = generateCandidatesAtScale(panels, region, resolved, 1, labelSettings);
   if (unscaled.length > 0 || !resolved.allowMinorScaling) {
     return unscaled.slice(0, resolved.maxCandidates);
   }
 
   const scaled: AutoLayoutCandidate[] = [];
   for (const factor of SCALE_STEPS.slice(1)) {
-    scaled.push(...generateCandidatesAtScale(panels, region, resolved, factor));
+    scaled.push(...generateCandidatesAtScale(panels, region, resolved, factor, labelSettings));
   }
   return sortAndDedupeCandidates(scaled).slice(0, resolved.maxCandidates);
 }
@@ -192,7 +220,10 @@ export function autoArrangeProject(
     const selected = activePage.panels.filter((panel) => selectedIds.has(panel.id));
     if (selected.length < 2) return failed(project, "Select at least two panels to arrange.");
     const safe = getSafeLayoutRegion(activePage.definition);
-    const bounds = getCollectiveBounds(selected);
+    const bounds = getCollectiveBounds(selected.map((panel) => ({
+      ...panel,
+      geometry: getPanelVisualBoundsMm(panel, project.labelSettings),
+    })));
     const preferred = clampRegionToSafe({
       xMm: Math.max(bounds.left, safe.xMm),
       yMm: Math.max(bounds.top, safe.yMm),
@@ -200,7 +231,7 @@ export function autoArrangeProject(
       heightMm: bounds.height,
     }, safe);
     let candidates = preferred.widthMm > 0 && preferred.heightMm > 0
-      ? generateAutoLayoutCandidates(selected, preferred, settings)
+      ? generateAutoLayoutCandidates(selected, preferred, settings, project.labelSettings)
       : [];
     if (candidates.length === 0) {
       const fallback = {
@@ -209,7 +240,7 @@ export function autoArrangeProject(
         widthMm: roundMm(safe.xMm + safe.widthMm - preferred.xMm),
         heightMm: roundMm(safe.yMm + safe.heightMm - preferred.yMm),
       };
-      candidates = generateAutoLayoutCandidates(selected, fallback, settings);
+      candidates = generateAutoLayoutCandidates(selected, fallback, settings, project.labelSettings);
     }
     if (candidates.length === 0) {
       return failed(project, "The selected panels do not fit inside the available safe area.");
@@ -231,6 +262,7 @@ export function autoArrangeProject(
         sourcePanels,
         getSafeLayoutRegion(activePage.definition),
         settings,
+        project.labelSettings,
       );
       if (candidates.length === 0) {
         return failed(project, "The page panels do not fit inside the safe area. Enable Auto Pagination to continue.");
@@ -249,7 +281,7 @@ export function autoArrangeProject(
   const allPanels = project.pages.flatMap((page) => page.panels);
   if (allPanels.length === 0) return failed(project, "There are no project panels to arrange.");
   if (!autoPaginate) return arrangeExistingProjectPages(project, settings, options);
-  return arrangeWholeProject(project, allPanels, settings, options);
+  return arrangeWholeProject(project, settings, options);
 }
 
 function arrangeExistingProjectPages(
@@ -260,7 +292,12 @@ function arrangeExistingProjectPages(
   const candidatesByPage = new Map<string, readonly AutoLayoutCandidate[]>();
   for (const page of project.pages) {
     if (page.panels.length === 0) continue;
-    const candidates = generateAutoLayoutCandidates(page.panels, getSafeLayoutRegion(page.definition), settings);
+    const candidates = generateAutoLayoutCandidates(
+      page.panels,
+      getSafeLayoutRegion(page.definition),
+      settings,
+      project.labelSettings,
+    );
     if (candidates.length === 0) {
       return failed(project, `${page.name} panels do not fit inside its safe area. Enable Auto Pagination to continue.`);
     }
@@ -292,20 +329,30 @@ function arrangePageWithOverflow(
   options: AutoArrangeOptions,
 ): AutoArrangeResult {
   const sourcePage = project.pages[activePageIndex];
-  const groups = paginatePanels(panels, sourcePage.definition, settings);
+  const groups = paginatePanels(panels, sourcePage.definition, settings, project.labelSettings);
   if (!groups) return failed(project, "At least one panel is too large for the A4 safe area.");
   const createdPages: FigurePage[] = [];
   for (let index = 1; index < groups.length; index += 1) {
     const pageNumber = project.pages.length + createdPages.length + 1;
-    createdPages.push(createA4Page(pageNumber, options.pageIdFactory?.(pageNumber) ?? createStableId("page")));
+    createdPages.push({
+      ...createA4Page(
+        pageNumber,
+        options.pageIdFactory?.(pageNumber) ?? createStableId("page"),
+        sourcePage.figureId,
+      ),
+      definition: sourcePage.definition,
+    });
   }
   const targetPages = [sourcePage, ...createdPages];
   const arrangedTargets = targetPages.map((page, index) => ({
     ...page,
     panels: applyCandidate(groups[index].panels, groups[index].candidate, page.id),
   }));
-  const nextPages = project.pages.map((page, index) => index === activePageIndex ? arrangedTargets[0] : page);
-  nextPages.push(...arrangedTargets.slice(1));
+  const nextPages = [
+    ...project.pages.slice(0, activePageIndex),
+    ...arrangedTargets,
+    ...project.pages.slice(activePageIndex + 1),
+  ].map((page, index) => page.name === `Page ${index + 1}` ? page : { ...page, name: `Page ${index + 1}` });
   const nextProject = { ...project, pages: nextPages };
   return completed(
     project,
@@ -319,32 +366,61 @@ function arrangePageWithOverflow(
 
 function arrangeWholeProject(
   project: FigureProject,
-  panels: readonly Panel[],
   settings: AutoLayoutSettings,
   options: AutoArrangeOptions,
 ): AutoArrangeResult {
-  const pageDefinition = project.pages[0].definition;
-  const groups = paginatePanels(panels, pageDefinition, settings);
-  if (!groups) return failed(project, "At least one panel is too large for the A4 safe area.");
-  const pages = [...project.pages];
+  const nextPages: FigurePage[] = [];
   const createdPageIds: string[] = [];
-  while (pages.length < groups.length) {
-    const pageNumber = pages.length + 1;
-    const page = createA4Page(pageNumber, options.pageIdFactory?.(pageNumber) ?? createStableId("page"));
-    pages.push(page);
-    createdPageIds.push(page.id);
+  let firstCandidates: readonly AutoLayoutCandidate[] = [];
+
+  for (const figure of getProjectFigures(project)) {
+    const panels = figure.pages.flatMap((page) => page.panels);
+    const pages = [...figure.pages];
+    const groups: PageGroup[] = [];
+    let cursor = 0;
+    while (cursor < panels.length) {
+      if (groups.length >= pages.length) {
+        const pageNumber = project.pages.length + createdPageIds.length + 1;
+        const page = {
+          ...createA4Page(
+            pageNumber,
+            options.pageIdFactory?.(pageNumber) ?? createStableId("page"),
+            figure.id,
+          ),
+          definition: figure.pages[0].definition,
+        };
+        pages.push(page);
+        createdPageIds.push(page.id);
+      }
+      const region = getSafeLayoutRegion(pages[groups.length].definition);
+      let match: PageGroup | null = null;
+      for (let end = panels.length; end > cursor; end -= 1) {
+        const slice = panels.slice(cursor, end);
+        const candidates = generateAutoLayoutCandidates(slice, region, settings, project.labelSettings);
+        if (candidates.length === 0) continue;
+        match = { panels: slice, candidate: candidates[0], candidates };
+        cursor = end;
+        break;
+      }
+      if (!match) return failed(project, "At least one panel is too large for an A4 safe area.");
+      groups.push(match);
+      if (firstCandidates.length === 0) firstCandidates = match.candidates;
+    }
+    nextPages.push(...pages.map((page, index) => index < groups.length
+      ? { ...page, panels: applyCandidate(groups[index].panels, groups[index].candidate, page.id) }
+      : { ...page, panels: [] }));
   }
-  const nextPages = pages.map((page, index) => index < groups.length
-    ? { ...page, panels: applyCandidate(groups[index].panels, groups[index].candidate, page.id) }
-    : { ...page, panels: [] });
-  const nextProject = { ...project, pages: nextPages };
+  const normalizedPages = nextPages.map((page, index) => page.name === `Page ${index + 1}`
+    ? page
+    : { ...page, name: `Page ${index + 1}` });
+  const nextProject = { ...project, pages: normalizedPages };
   return completed(
     project,
     nextProject,
     options.target,
-    panels.map((panel) => panel.id),
+    project.pages.flatMap((page) => page.panels.map((panel) => panel.id)),
     createdPageIds,
-    groups[0].candidates,
+    firstCandidates,
   );
 }
 
@@ -358,6 +434,7 @@ function paginatePanels(
   panels: readonly Panel[],
   page: PageDefinition,
   settings: AutoLayoutSettings,
+  labelSettings: ProjectLabelSettings,
 ): PageGroup[] | null {
   const groups: PageGroup[] = [];
   let cursor = 0;
@@ -366,7 +443,7 @@ function paginatePanels(
     let match: PageGroup | null = null;
     for (let end = panels.length; end > cursor; end -= 1) {
       const slice = panels.slice(cursor, end);
-      const candidates = generateAutoLayoutCandidates(slice, region, settings);
+      const candidates = generateAutoLayoutCandidates(slice, region, settings, labelSettings);
       if (candidates.length === 0) continue;
       match = { panels: slice, candidate: candidates[0], candidates };
       cursor = end;
@@ -383,10 +460,15 @@ function generateCandidatesAtScale(
   region: LayoutRegion,
   settings: AutoLayoutSettings,
   scaleFactor: number,
+  labelSettings: ProjectLabelSettings,
 ): AutoLayoutCandidate[] {
-  const sizes = panels.map((panel) => ({
-    widthMm: roundMm(panel.geometry.widthMm * scaleFactor),
-    heightMm: roundMm(panel.geometry.heightMm * scaleFactor),
+  const sizes: LayoutFootprint[] = panels.map((panel) => ({
+    ...getPanelLayoutFootprintMm(panel, labelSettings, scaleFactor),
+    imageWidthMm: roundMm(panel.geometry.widthMm * scaleFactor),
+    imageHeightMm: roundMm(panel.geometry.heightMm * scaleFactor),
+    labelAnchorOffsetMm: panel.label.visible && panel.label.text.trim()
+      ? panel.label.offsetYmm
+      : null,
   }));
   if (sizes.some((size) => size.widthMm > region.widthMm || size.heightMm > region.heightMm)) return [];
 
@@ -398,13 +480,14 @@ function generateCandidatesAtScale(
       const last = state.rows.at(-1);
       if (last) {
         const widthMm = roundMm(last.widthMm + settings.horizontalGapMm + size.widthMm);
-        const heightMm = Math.max(last.heightMm, size.heightMm);
+        const nextIndexes = [...last.panelIndexes, panelIndex];
+        const heightMm = getRowAlignmentMetrics(nextIndexes, sizes).heightMm;
         const usedHeightMm = roundMm(state.usedHeightMm - last.heightMm + heightMm);
         if (widthMm <= region.widthMm && usedHeightMm <= region.heightMm) {
           next.push({
             rows: [
               ...state.rows.slice(0, -1),
-              { panelIndexes: [...last.panelIndexes, panelIndex], widthMm, heightMm },
+              { panelIndexes: nextIndexes, widthMm, heightMm },
             ],
             usedHeightMm,
           });
@@ -433,6 +516,7 @@ function generateCandidatesAtScale(
     region,
     settings,
     scaleFactor,
+    sizes,
   )));
 }
 
@@ -469,6 +553,7 @@ function buildCandidate(
   region: LayoutRegion,
   settings: AutoLayoutSettings,
   scaleFactor: number,
+  sizes: readonly LayoutFootprint[],
 ): AutoLayoutCandidate {
   const placements = new Map<string, PanelGeometry>();
   const rows: AutoLayoutRow[] = [];
@@ -478,12 +563,18 @@ function buildCandidate(
       ? region.xMm
       : roundMm(region.xMm + (region.widthMm - row.widthMm) / 2);
     let cursorX = xMm;
+    const rowMetrics = getRowAlignmentMetrics(row.panelIndexes, sizes);
     row.panelIndexes.forEach((panelIndex) => {
       const panel = panels[panelIndex];
-      const widthMm = roundMm(panel.geometry.widthMm * scaleFactor);
-      const heightMm = roundMm(panel.geometry.heightMm * scaleFactor);
-      placements.set(panel.id, { xMm: roundMm(cursorX), yMm: roundMm(yMm), widthMm, heightMm });
-      cursorX += widthMm + settings.horizontalGapMm;
+      const footprint = sizes[panelIndex];
+      const imageTopOffsetMm = rowMetrics.imageTopOffsetsMm.get(panelIndex)!;
+      placements.set(panel.id, {
+        xMm: roundMm(cursorX - footprint.leftMm),
+        yMm: roundMm(yMm + imageTopOffsetMm - rowMetrics.topMm),
+        widthMm: footprint.imageWidthMm,
+        heightMm: footprint.imageHeightMm,
+      });
+      cursorX += footprint.widthMm + settings.horizontalGapMm;
     });
     rows.push({
       panelIds: row.panelIndexes.map((index) => panels[index].id),
@@ -495,7 +586,15 @@ function buildCandidate(
     yMm += row.heightMm + settings.verticalGapMm;
   });
 
-  const scoreBreakdown = calculateScoreBreakdown(panels, state, placements, region, scaleFactor);
+  const scoreBreakdown = calculateScoreBreakdown(
+    panels,
+    state,
+    placements,
+    region,
+    scaleFactor,
+    settings.horizontalGapMm,
+    sizes,
+  );
   const score = calculateWeightedScore(scoreBreakdown, SCORE_WEIGHTS[settings.mode]);
   return {
     placements,
@@ -507,16 +606,63 @@ function buildCandidate(
   };
 }
 
+function getRowAlignmentMetrics(
+  panelIndexes: readonly number[],
+  sizes: readonly LayoutFootprint[],
+): RowAlignmentMetrics {
+  const imageTopOffsetsMm = new Map<number, number>();
+  const firstLabeledIndex = panelIndexes.find((index) => sizes[index].labelAnchorOffsetMm !== null);
+
+  if (firstLabeledIndex === undefined) {
+    panelIndexes.forEach((index) => imageTopOffsetsMm.set(index, -sizes[index].imageHeightMm / 2));
+  } else {
+    const firstLabeledCenterMm = -sizes[firstLabeledIndex].labelAnchorOffsetMm!
+      + sizes[firstLabeledIndex].imageHeightMm / 2;
+    panelIndexes.forEach((index, position) => {
+      const size = sizes[index];
+      if (size.labelAnchorOffsetMm !== null) {
+        imageTopOffsetsMm.set(index, -size.labelAnchorOffsetMm);
+        return;
+      }
+      const previousIndex = panelIndexes[position - 1];
+      const previousTopMm = previousIndex === undefined
+        ? firstLabeledCenterMm - size.imageHeightMm / 2
+        : imageTopOffsetsMm.get(previousIndex)! + sizes[previousIndex].imageHeightMm / 2 - size.imageHeightMm / 2;
+      imageTopOffsetsMm.set(index, previousTopMm);
+    });
+  }
+
+  const topMm = Math.min(...panelIndexes.map((index) => (
+    imageTopOffsetsMm.get(index)! + sizes[index].topMm
+  )));
+  const bottomMm = Math.max(...panelIndexes.map((index) => (
+    imageTopOffsetsMm.get(index)! + sizes[index].bottomMm
+  )));
+  return {
+    imageTopOffsetsMm,
+    topMm: roundMm(topMm),
+    bottomMm: roundMm(bottomMm),
+    heightMm: roundMm(bottomMm - topMm),
+  };
+}
+
 function calculateScoreBreakdown(
   panels: readonly Panel[],
   state: PartitionState,
   placements: ReadonlyMap<string, PanelGeometry>,
   region: LayoutRegion,
   scaleFactor: number,
+  horizontalGapMm: number,
+  sizes: readonly LayoutFootprint[],
 ): AutoLayoutScoreBreakdown {
   const widths = state.rows.map((row) => row.widthMm);
   const heights = state.rows.map((row) => row.heightMm);
   const counts = state.rows.map((row) => row.panelIndexes.length);
+  const avoidableRowBreaks = state.rows.slice(0, -1).reduce((sum, row, rowIndex) => {
+    const nextPanelIndex = state.rows[rowIndex + 1].panelIndexes[0];
+    const nextWidthMm = sizes[nextPanelIndex].widthMm;
+    return sum + (roundMm(row.widthMm + horizontalGapMm + nextWidthMm) <= region.widthMm ? 1 : 0);
+  }, 0);
   const diagonal = Math.max(1, Math.hypot(region.widthMm, region.heightMm));
   const movement = panels.reduce((sum, panel) => {
     const placement = placements.get(panel.id)!;
@@ -528,6 +674,7 @@ function calculateScoreBreakdown(
     rowHeightVariation: normalizedStandardDeviation(heights, region.heightMm),
     rowCountVariation: normalizedStandardDeviation(counts, Math.max(1, panels.length)),
     orphanRow: panels.length > 2 && counts.at(-1) === 1 ? 1 : 0,
+    avoidableRowBreaks,
     usedHeight: state.usedHeightMm / region.heightMm * 100,
     movement,
     scaling: roundMm((1 - scaleFactor) * 100),

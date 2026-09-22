@@ -84,6 +84,14 @@ describe("review geometry", () => {
 });
 
 describe("review labels", () => {
+  it("detects labels outside the safe margin even when they remain on the page", () => {
+    const initial = createInitialEditorDocument();
+    const pageId = initial.project.pages[0].id;
+    const result = codes(documentWith([panel("a", pageId, "a", 12, 12)]));
+    expect(result).toContain("label-outside-safe-margin");
+    expect(result).not.toContain("label-outside-page");
+  });
+
   it("detects labels outside the page", () => {
     const initial = createInitialEditorDocument();
     const pageId = initial.project.pages[0].id;
@@ -146,6 +154,21 @@ describe("review presets and raster quality", () => {
     expect(codes(documentWith([source], [asset("dpi", "png", 472, 236)]))).toContain("low-dpi");
     expect(codes(documentWith([source], [asset("dpi", "png", 314, 157)]))).toContain("low-dpi-strong");
     expect(codes(documentWith([source], [asset("dpi", "png", 473, 237)]))).not.toContain("low-dpi");
+  });
+
+  it("reports clipboard bitmap fallback independently from effective DPI", () => {
+    const initial = createInitialEditorDocument();
+    const pageId = initial.project.pages[0].id;
+    const source = panel("clipboard", pageId, "clipboard");
+    const clipboardAsset = {
+      ...asset("clipboard", "png", 2400, 1200),
+      sourceKind: "clipboard" as const,
+      canonicalFormat: "dib" as const,
+      qualityClass: "bitmap-fallback" as const,
+      isVector: false,
+      isLosslessRaster: true,
+    };
+    expect(codes(documentWith([source], [clipboardAsset]))).toContain("clipboard-bitmap-fallback");
   });
 });
 

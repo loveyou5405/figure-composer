@@ -2,7 +2,7 @@
 
 Figure Composer is a local-first scientific figure assembly application. It provides a deterministic A4 workspace for arranging biomedical manuscript and thesis panels, with editable PowerPoint as the primary output.
 
-Figure Composer `v1.0.1` includes all Milestones 1-12, deterministic Review findings, and a thin Tauri 2 desktop shell while retaining the same local-first, millimeter-based multi-page model and editable PowerPoint output.
+Figure Composer `v1.3` includes all implemented Milestones 1-12, explicit multi-page Figure groups, single-file portable projects with exact embedded source images, deterministic Review findings, a thin Tauri 2 desktop shell, and Ctrl/Cmd+V paste for image representations exposed by the browser/WebView. Full native EMF/WMF clipboard fidelity remains on the roadmap.
 
 The canonical project architecture is multi-page: an ordered project contains independent A4 pages, and every panel belongs to exactly one page with page-local millimeter geometry. Compact navigation and page management operate without introducing a stacked document canvas.
 
@@ -14,7 +14,7 @@ The canonical project architecture is multi-page: an ordered project contains in
 
 ## Run locally
 
-On Windows, double-click `Figure Composer Launcher v1.0.1.cmd` to start the managed local preview and open it in the default browser. Double-click `Close Figure Composer v1.0.1.cmd` to stop only the preview process owned by that launcher. The command window is minimized and closes after the action finishes. These controls require Node.js and are an interim convenience until the native Tauri executable is built; they are not the final no-server desktop package.
+On Windows, double-click `Figure Composer Launcher v1.3.cmd` to start the managed local preview and open it in the default browser. Double-click `Close Figure Composer v1.3.cmd` to stop only the preview process owned by that launcher. The command window is minimized and closes after the action finishes. These controls require Node.js and are an interim convenience until the native Tauri executable is built; they are not the final no-server desktop package.
 
 After any version change, update npm, Cargo, Tauri, the changelog/release record, then run:
 
@@ -58,6 +58,8 @@ npm run version:check
 - Zoom from 25% to 400%
 - Fit-page and fit-width controls
 - Multi-file PNG, JPEG, SVG, and TIFF import through the picker or canvas drop
+- Ctrl/Cmd+V paste for browser-exposed SVG, TIFF, PNG, and JPEG clipboard representations as one active-page panel
+- Clipboard source-quality/effective-DPI metadata, Other-by-default typing, physical-size preservation when reliable, and deterministic 3 mm safe-region placement
 - Independent selectable panels with millimeter geometry
 - Local, non-destructive TIFF first-page decoding into a session-only PNG preview
 - Drag-to-position with 1 mm snapping
@@ -81,13 +83,16 @@ npm run version:check
 - Hidden-label exclusion and editable millimeter label offsets, with a publication-style -2 mm / -2 mm outside-panel default
 - Project-level Arial Bold 10 pt defaults with continuous or restart-per-page sequence architecture
 - Label validation hooks for duplicate, missing, outside-page, and manual states
-- Human-readable `.figproj` files using schema version `0.1.0`
-- Compact Open, Save, Save As, Undo, and Redo controls with standard keyboard shortcuts
+- Single-file portable `.figproj` projects containing `project.json` and exact original image bytes
+- Lossless embedded PNG/JPEG/SVG/TIFF storage with byte-size and SHA-256 verification on reopen
+- Explicit Import Figure plus Save, Save As, Undo, and Redo controls with standard keyboard shortcuts
+- Backward-compatible opening of legacy human-readable JSON `.figproj` files using schema version `0.1.0`
 - Exact multi-page millimeter geometry, labels, presets, types, and Auto Layout preference restoration
 - Missing-source placeholders that preserve panel geometry and metadata
 - Debounced local crash recovery with explicit Restore / Discard
 - One-entry drag, resize, and Auto Layout history transactions with a 200-operation limit
 - Compact `Page n / total` navigation with Add Page
+- Explicit New Figure creation, Figure-local page status, and first-page Figure quick jump
 - Page deletion, duplication, and ordering without a document-management sidebar
 - Explicit single- and multi-panel movement to any page or adjacent page
 - Safe-area-aware cross-page group placement that preserves size, identity, labels, presets, overrides, and relative geometry
@@ -96,20 +101,30 @@ npm run version:check
 - Missing-source Relink that preserves exact geometry and scientific metadata
 - Capability-aware source fingerprints and Check Sources summaries without silent replacement
 - Vector-preserving SVG replacement and Undo/Redo for all source lifecycle operations
-- Editable `.pptx` export with one ordered A4 slide per project page
-- Compact All pages / Current page export scope dialog
+- Editable `.pptx` export with every Figure in one deck and one ordered A4 slide per project page
+- Compact All Figures / Current page export scope dialog
 - Independent named panel pictures and editable label text boxes
 - Direct millimeter-to-PowerPoint geometry with missing-source preflight
 - Deterministic Review findings for bounds, overlap, labels, presets, DPI, and sources
 - Focusable Review items with explicit safe fixes and warning-aware export
 - Tauri 2 Windows/macOS source architecture with native file dialogs
 - Persistent desktop source paths with non-destructive best-effort rehydration
-- New/Open/Save/Undo/Redo/Select All/Duplicate/Delete/nudge shortcuts
+- New/Import Figure/Save/Undo/Redo/Select All/Duplicate/Delete/nudge shortcuts
 - Three-step onboarding and a bundled three-page mixed-panel vector demo
 - Save / Discard / Cancel protection when closing an unsaved desktop project
 - Per-launch isolated temporary workspace with active-instance locking and stale-session cleanup
 - Persistent preferences, reusable presets, label profiles, and recent settings outside disposable TEMP
-- Synchronized `v1.0.1` web/desktop/launcher identity with build-enforced version history
+- Synchronized `v1.3` web/desktop/launcher identity with build-enforced version history
 - Versioned Windows preview launcher and ownership-scoped closer with no broad process termination
+- Collapsed clipboard source diagnostics with available formats, canonical/preview distinction, quality class, pixel dimensions, and live effective DPI
 
-See `specs/releases/v1.0.1.md`, `VERSION_HISTORY.md`, and `CHANGELOG.md` for the current release and rollback record.
+## Roadmap
+
+- High-fidelity Ctrl/Cmd+V import from PowerPoint through separate web and native clipboard providers
+- Fidelity-ranked SVG/EMF/WMF/TIFF/PNG/DIB/JPEG canonical source selection
+- PowerPoint physical-size preservation, deterministic 3 mm cascade placement, quality metadata, and effective-DPI Review
+- Canonical native clipboard export without substituting lower-quality previews
+
+See `specs/modules/13-clipboard-import.md` for the complete contract. Web clipboard paste and portable storage of its selected canonical file are implemented; native EMF/WMF enumeration and canonical native-source export are not implemented in this checkpoint.
+
+See `specs/releases/v1.3.0.md`, `VERSION_HISTORY.md`, and `CHANGELOG.md` for the current release and rollback record.

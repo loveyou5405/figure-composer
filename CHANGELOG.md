@@ -4,10 +4,62 @@ All notable changes to Figure Composer are documented here. Versions follow Sema
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-22
+
+### Added
+
+- Added a single-file portable `.figproj` container with `project.json` plus exact embedded PNG, JPEG, SVG, and TIFF source bytes.
+- Added per-asset byte-size and SHA-256 integrity verification during Import Figure.
+- Added an explicit `Import Figure` project action and portable project MIME/file-picker support in browser and desktop modes.
+
+### Changed
+
+- Save and Save As now create portable projects that can move to another computer and reopen without the original image paths.
+- Reopened embedded assets become exact in-session source files for later editing, saving, source checking, and export.
+- Portable Save blocks when exact source bytes are unavailable rather than substituting a rendered preview or recompressed image.
+- Legacy JSON `.figproj` files remain readable; recovery storage remains metadata-only and separate from durable portable Save.
+
+## [1.2.0] - 2026-09-22
+
+### Added
+
+- Added explicit Figure grouping with a `New Figure` action; ordinary Add Page continues the active Figure.
+- Added first-page Figure jumping beside the page navigator and a Figure-local page indicator below the canvas that is excluded from the page and PPTX.
+- Added backward-compatible Figure ownership for saved projects that predate Figure IDs.
+
+### Changed
+
+- Continuous Auto Label now continues across pages within one Figure and restarts at A for each new Figure.
+- Auto Layout and overflow pagination preserve Figure boundaries, and pages can only be reordered within their Figure.
+- PPTX `All Figures` export writes every Figure into one presentation in project order, with each Figure Composer page becoming one A4 slide.
+
+## [1.1.2] - 2026-09-21
+
+### Fixed
+
+- Auto Layout now aligns visible label anchors within each row while keeping a hidden-label panel centered on the preceding image.
+- Auto Label now recognizes top-, center-, or label-aligned panels as row peers, preventing left-to-right labels from reversing after `Show label` is disabled.
+- The current versioned closer can securely stop an older managed preview from the same checkout after an in-place update.
+
+## [1.1.1] - 2026-09-20
+
+### Fixed
+
+- Auto Layout now aligns images in each row by their vertical centers, so disabling `Show label` no longer raises that image to the neighboring label boundary.
+- Editor and preset scale percentages now use PowerPoint's 96 DPI original-image reference; `60%` in Figure Composer therefore exports as the corresponding `60%` PowerPoint size rather than the former fixed-64-mm ratio.
+- Loading an older `.figproj` normalizes its internal panel scale bases without changing any saved panel geometry.
+
+## [1.1.0] - 2026-09-20
+
 ### Added
 
 - Added local `.tif` / `.tiff` import using first-page TIFF decoding and session-only PNG previews while preserving original source bytes.
 - Added TIFF MIME/extension validation, malformed-data tests, and a 100-megapixel preview safety limit.
+- Added a complete high-fidelity PowerPoint clipboard roadmap covering web/native providers, SVG/EMF/WMF/TIFF/PNG/DIB/JPEG fidelity ranking, physical-size preservation, canonical/preview separation, persistence, Review, export, TEMP ownership, and verification.
+- Added a dedicated clipboard-import module specification and connected contracts across project data, asset import, UI, save/load, PPTX export, validation, and desktop packaging.
+- Implemented Ctrl/Cmd+V image paste through the web clipboard provider for browser-exposed SVG, TIFF, PNG, and JPEG representations.
+- Clipboard paste now creates one Other panel on the active page as one Undo/Redo transaction, preserves reliable HTML physical dimensions, uses a deterministic 3 mm safe-region cascade, and displays source-quality/effective-DPI metadata.
+- Added compact, collapsed Clipboard Source Diagnostics with available/selected formats, canonical-versus-preview identity, vector/raster class, source pixels, physical/displayed size, live effective DPI, conversion state, and bitmap-fallback guidance.
 
 ### Changed
 
@@ -18,6 +70,10 @@ All notable changes to Figure Composer are documented here. Versions follow Sema
 - Bound canvas interactions to the stable active-page record while keeping page management compact.
 - Added structural validation and pure operations for page creation, page-scoped mutations, and explicit cross-page panel movement.
 - Updated the future PPTX contract to emit one ordered A4 slide per project page.
+
+### Known limitations
+
+- Native EMF/WMF enumeration, portable clipboard-asset embedding, and canonical native clipboard export remain roadmap work. Browser/WebView fidelity is limited to representations the platform exposes to web paste events.
 
 ## [1.0.1] - 2026-09-18
 

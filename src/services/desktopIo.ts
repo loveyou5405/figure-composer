@@ -18,7 +18,7 @@ export function isDesktopRuntime(hostWindow: Window = window): boolean {
 
 export async function pickDesktopProject(): Promise<DesktopPickedFile | null> {
   const paths = await pickPaths(false, [{ name: "Figure Composer project", extensions: ["figproj"] }]);
-  return paths[0] ? readDesktopFile(paths[0], "application/json") : null;
+  return paths[0] ? readDesktopFile(paths[0], "application/octet-stream") : null;
 }
 
 export async function pickDesktopAssets(multiple = true): Promise<DesktopPickedFile[]> {
@@ -35,25 +35,27 @@ export function readDesktopPath(path: string, type = mimeForPath(path)): Promise
   return readDesktopFile(path, type);
 }
 
-export async function saveDesktopText(
-  contents: string,
-  suggestedName: string,
-  currentPath: string | null,
-  saveAs: boolean,
-): Promise<DesktopSaveResult> {
-  const path = !saveAs && currentPath ? currentPath : await chooseSavePath(suggestedName, "Figure Composer project", ["figproj"]);
-  if (!path) return { cancelled: true, path: currentPath };
-  const { writeTextFile } = await import("@tauri-apps/plugin-fs");
-  await writeTextFile(path, contents);
-  return { cancelled: false, path };
-}
-
 export async function saveDesktopBlob(
   blob: Blob,
   suggestedName: string,
 ): Promise<DesktopSaveResult> {
   const path = await chooseSavePath(suggestedName, "PowerPoint presentation", ["pptx"]);
   if (!path) return { cancelled: true, path: null };
+  const { writeFile } = await import("@tauri-apps/plugin-fs");
+  await writeFile(path, new Uint8Array(await blob.arrayBuffer()));
+  return { cancelled: false, path };
+}
+
+export async function saveDesktopProjectBlob(
+  blob: Blob,
+  suggestedName: string,
+  currentPath: string | null,
+  saveAs: boolean,
+): Promise<DesktopSaveResult> {
+  const path = !saveAs && currentPath
+    ? currentPath
+    : await chooseSavePath(suggestedName, "Portable Figure Composer project", ["figproj"]);
+  if (!path) return { cancelled: true, path: currentPath };
   const { writeFile } = await import("@tauri-apps/plugin-fs");
   await writeFile(path, new Uint8Array(await blob.arrayBuffer()));
   return { cancelled: false, path };

@@ -31,6 +31,7 @@ import {
   applyDefaultOffsetsToAutomaticLabels,
   autoLabelPanels,
   createDefaultPanelLabel,
+  getPageLabelStartIndex,
   resetPanelLabelOffset,
   updatePanelLabelOffset,
   updatePanelLabelText,
@@ -52,9 +53,11 @@ import {
   type DistributionAxis,
   type EqualSizeOperation,
 } from "./domain/layout";
+import { getPageMargins, type PageMargins } from "./domain/page";
 import {
   getDefaultImportAnchor,
   getInitialPanelSizeMm,
+  getPowerPointReferenceSizeMm,
   placePanelGeometry,
   duplicateSelectedPanels,
   resizePanelGeometry,
@@ -63,17 +66,19 @@ import {
   type PointMm,
 } from "./domain/panel";
 import {
-  appendA4Page,
+  appendNewFigure,
+  appendPageToFigure,
   deleteProjectPage,
   duplicateProjectPage,
   getAllProjectPanels,
+  getProjectFigures,
   mapProjectPanels,
   movePanelsToPage,
   reorderProjectPage,
+  updateProjectPageMargins,
   updateProjectPagePanels,
   type FigurePage,
 } from "./domain/project";
-import { deserializeProjectFile, serializeProjectFile } from "./domain/projectFile";
 import {
   refreshAssetSource,
   relinkAssetSource,
@@ -96,6 +101,7 @@ import {
   applyPresetUpdateToPanels,
   applyTypeToPanels,
   createCustomTypeAndPreset,
+  DEFAULT_TYPE_IDS,
   derivePresetSizeMm,
   getPanelScalePercent,
   getPresetForType,
@@ -115,6 +121,7 @@ import {
   screenPixelsToMm,
 } from "./domain/viewport";
 import {
+  effectiveDpi,
   movePanelInsideSafeMargin,
   reviewDocument,
   summarizeReview,
@@ -122,13 +129,19 @@ import {
 } from "./domain/validation";
 import { loadImportedAsset, loadImportedAssetBatch } from "./services/assetImport";
 import {
+  clipboardQualityMetadata,
+  clipboardSourceDiagnostics,
+  placeClipboardPanelGeometry,
+  webClipboardProvider,
+} from "./services/clipboardImport";
+import {
   isDesktopRuntime,
   pickDesktopAssets,
   pickDesktopProject,
   pickDesktopSource,
   readDesktopPath,
   saveDesktopBlob,
-  saveDesktopText,
+  saveDesktopProjectBlob,
 } from "./services/desktopIo";
 import { createDemoProject } from "./services/demoProject";
 import {
@@ -138,10 +151,10 @@ import {
   type AppSettings,
 } from "./services/appSettings";
 import {
-  readProjectText,
   saveProjectDocument,
   type ProjectFileHandle,
 } from "./services/projectFileIo";
+import { createPortableProjectBlob, loadProjectDocument, PORTABLE_PROJECT_MIME } from "./services/portableProject";
 import {
   AUTOSAVE_DELAY_MS,
   clearRecovery,
@@ -276,6 +289,7 @@ export function App() {
   const [pptxExportStatus, setPptxExportStatus] = useState<string | null>(null);
   const [pendingAppClose, setPendingAppClose] = useState(false);
   const [isClosingApp, setIsClosingApp] = useState(false);
+  const [isSavingProject, setIsSavingProject] = useState(false);
   const [saveHandle, setSaveHandle] = useState<ProjectFileHandle | null>(null);
   const [nativeProjectPath, setNativeProjectPath] = useState<string | null>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
@@ -287,6 +301,7 @@ export function App() {
   const objectUrlsRef = useRef(new Set<string>());
   const sourceBindingsRef = useRef(new Map<string, SourceBinding>());
   const placementIndexRef = useRef(new Map<string, number>());
+  const clipboardPlacementIndexRef = useRef(new Map<string, number>());
   const isDirtyRef = useRef(false);
   const isExportingRef = useRef(false);
 
@@ -308,7 +323,16 @@ export function App() {
 
   const activePageIndex = Math.max(0, project.pages.findIndex((page) => page.id === activePageId));
   const activePage = project.pages[activePageIndex];
+  const projectFigures = useMemo(() => getProjectFigures(project), [project]);
+  const activeFigureIndex = Math.max(0, projectFigures.findIndex((figure) => figure.id === activePage.figureId));
+  const activeFigure = projectFigures[activeFigureIndex];
+  const activeFigurePageIndex = Math.max(0, activeFigure.pages.findIndex((page) => page.id === activePageId));
+  const canMovePageEarlier = activePageIndex > 0
+    && project.pages[activePageIndex - 1].figureId === activePage.figureId;
+  const canMovePageLater = activePageIndex < project.pages.length - 1
+    && project.pages[activePageIndex + 1].figureId === activePage.figureId;
   const pageDefinition = activePage.definition;
+  const pageMargins = getPageMargins(pageDefinition);
   const panels = activePage.panels;
   const allPanels = useMemo(() => getAllProjectPanels(project), [project]);
   const metrics = useMemo(() => getViewportMetrics(pageDefinition, zoom), [pageDefinition, zoom]);
@@ -445,24 +469,34 @@ export function App() {
   }, []);
 
   const saveProject = useCallback(async (saveAs = false) => {
+    if (isSavingProject) return false;
+    setIsSavingProject(true);
     setProjectFileError(null);
+    setSaveStatus("Packing portable project…");
     try {
+      const projectBlob = await createPortableProjectBlob(document, sourceBindingsRef.current);
       if (isDesktopRuntime()) {
-        const result = await saveDesktopText(
-          serializeProjectFile(document),
+        const result = await saveDesktopProjectBlob(
+          projectBlob,
           `${safeFileStem(document.project.title)}.figproj`,
           nativeProjectPath,
           saveAs,
         );
-        if (result.cancelled) return false;
+        if (result.cancelled) {
+          setSaveStatus(isDirty ? "Unsaved changes" : "Saved");
+          return false;
+        }
         setNativeProjectPath(result.path);
         setSavedDocument(document);
         clearRecovery(localStorage);
         setSaveStatus("Saved");
         return true;
       }
-      const result = await saveProjectDocument(document, saveHandle, saveAs);
-      if (result.cancelled) return false;
+      const result = await saveProjectDocument(projectBlob, document.project.title, saveHandle, saveAs);
+      if (result.cancelled) {
+        setSaveStatus(isDirty ? "Unsaved changes" : "Saved");
+        return false;
+      }
       setSaveHandle(result.handle);
       setSavedDocument(document);
       clearRecovery(localStorage);
@@ -472,8 +506,10 @@ export function App() {
       setProjectFileError(error instanceof Error ? error.message : "The project could not be saved.");
       setSaveStatus("Save failed");
       return false;
+    } finally {
+      setIsSavingProject(false);
     }
-  }, [document, nativeProjectPath, saveHandle]);
+  }, [document, isDirty, isSavingProject, nativeProjectPath, saveHandle]);
 
   const flushAppSettings = useCallback(() => {
     saveAppSettings(localStorage, appSettings);
@@ -540,15 +576,25 @@ export function App() {
   const openProjectFile = useCallback(async (file: File, nativePath: string | null = null) => {
     setProjectFileError(null);
     try {
-      let loaded = deserializeProjectFile(await readProjectText(file), assets);
-      if (isDesktopRuntime()) {
+      setSaveStatus("Opening portable project…");
+      const opened = await loadProjectDocument(file, assets);
+      let loaded = opened.document;
+      const nextBindings = new Map<string, SourceBinding>();
+      loaded.assets.forEach((asset) => {
+        const currentBinding = sourceBindingsRef.current.get(asset.id);
+        if (currentBinding) nextBindings.set(asset.id, currentBinding);
+      });
+      opened.sourceFiles.forEach((sourceFile, assetId) => {
+        nextBindings.set(assetId, createSnapshotSourceBinding(sourceFile));
+      });
+      if (!opened.portable && isDesktopRuntime()) {
         const restoredAssets = await Promise.all(loaded.assets.map(async (asset) => {
           if (!asset.sourceReference || asset.sourceReference.startsWith("bundled-demo://")) return asset;
           try {
             const picked = await readDesktopPath(asset.sourceReference, asset.mimeType);
             const restored = await loadImportedAsset(picked.file);
             objectUrlsRef.current.add(restored.previewUrl);
-            sourceBindingsRef.current.set(asset.id, createSnapshotSourceBinding(picked.file));
+            nextBindings.set(asset.id, createSnapshotSourceBinding(picked.file));
             return { ...restored, id: asset.id, sourceReference: asset.sourceReference, missing: false };
           } catch {
             return asset;
@@ -556,6 +602,10 @@ export function App() {
         }));
         loaded = { ...loaded, assets: restoredAssets };
       }
+      loaded.assets.forEach((asset) => {
+        if (asset.previewUrl.startsWith("blob:")) objectUrlsRef.current.add(asset.previewUrl);
+      });
+      sourceBindingsRef.current = nextBindings;
       setHistory(replaceHistory(loaded));
       setSavedDocument(loaded);
       setSaveHandle(null);
@@ -569,6 +619,7 @@ export function App() {
   }, [assets, resetTransientEditorState]);
 
   const requestOpenProject = useCallback(async () => {
+    if (isDirty && !window.confirm("Import another Figure project and discard unsaved changes?")) return;
     if (!isDesktopRuntime()) {
       projectInputRef.current?.click();
       return;
@@ -579,7 +630,7 @@ export function App() {
     } catch (error) {
       setProjectFileError(error instanceof Error ? error.message : "The project could not be opened.");
     }
-  }, [openProjectFile]);
+  }, [isDirty, openProjectFile]);
 
   const handleProjectFileInput = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -652,7 +703,7 @@ export function App() {
 
       const sourceReference = sourceReferences.get(result.file);
       const asset = sourceReference ? { ...result.asset, sourceReference } : result.asset;
-      const baseSizeMm = getInitialPanelSizeMm(asset.intrinsicWidthPx, asset.intrinsicHeightPx);
+      const baseSizeMm = getPowerPointReferenceSizeMm(asset.intrinsicWidthPx, asset.intrinsicHeightPx);
       const inferredTypeId = inferPanelTypeIdFromFilename(asset.sourceName);
       const { type, preset } = getPresetForType(types, presets, inferredTypeId);
       const displaySizeMm = derivePresetSizeMm(baseSizeMm, preset);
@@ -691,6 +742,76 @@ export function App() {
     }
     setImportErrors(nextErrors);
   }, [activePageId, commitDocument, pageDefinition, presets, project.labelSettings, types]);
+
+  const importClipboard = useCallback(async (clipboardData: DataTransfer) => {
+    setActiveTab("Assets");
+    setImportErrors([]);
+    try {
+      const payload = await webClipboardProvider.read(clipboardData);
+      if (!payload) {
+        setImportErrors([
+          "The clipboard does not expose a supported image to this browser. Copy the PowerPoint object again, or use Import files. Native EMF/WMF paste requires the future desktop provider.",
+        ]);
+        return;
+      }
+      const loadedAsset = await loadImportedAsset(payload.file);
+      const diagnosticAsset: ImportedAsset = {
+        ...loadedAsset,
+        ...clipboardQualityMetadata(payload),
+      };
+      const asset: ImportedAsset = {
+        ...diagnosticAsset,
+        clipboardDiagnostics: clipboardSourceDiagnostics(payload, diagnosticAsset),
+      };
+      const requestedSize = payload.physicalSizeMm
+        ?? getInitialPanelSizeMm(asset.intrinsicWidthPx, asset.intrinsicHeightPx);
+      const cascadeIndex = clipboardPlacementIndexRef.current.get(activePageId) ?? 0;
+      const geometry = placeClipboardPanelGeometry(requestedSize, pageDefinition, cascadeIndex);
+      const baseSizeMm = getPowerPointReferenceSizeMm(asset.intrinsicWidthPx, asset.intrinsicHeightPx);
+      const { type, preset } = getPresetForType(types, presets, DEFAULT_TYPE_IDS.OTHER);
+      const panel: Panel = {
+        id: createStableId("panel"),
+        pageId: activePageId,
+        assetId: asset.id,
+        typeId: type.id,
+        presetId: preset.id,
+        baseSizeMm,
+        geometry,
+        aspectRatioLocked: true,
+        manualScaleOverride: Math.abs(geometry.widthMm - baseSizeMm.widthMm) > 0.02
+          || Math.abs(geometry.heightMm - baseSizeMm.heightMm) > 0.02,
+        label: createDefaultPanelLabel(project.labelSettings),
+      };
+
+      commitDocument("Paste clipboard panel", (current) => ({
+        ...current,
+        assets: [...current.assets, asset],
+        project: updateProjectPagePanels(
+          current.project,
+          activePageId,
+          (currentPanels) => [...currentPanels, panel],
+        ),
+      }));
+      clipboardPlacementIndexRef.current.set(activePageId, cascadeIndex + 1);
+      objectUrlsRef.current.add(asset.previewUrl);
+      sourceBindingsRef.current.set(asset.id, createSnapshotSourceBinding(payload.file));
+      setSelection(selectOnlyPanel(panel.id));
+    } catch (error) {
+      setImportErrors([error instanceof Error ? `Clipboard paste failed: ${error.message}` : "Clipboard paste failed."]);
+    }
+  }, [activePageId, commitDocument, pageDefinition, presets, project.labelSettings, types]);
+
+  useEffect(() => {
+    const handlePaste = (event: ClipboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName ?? "")) return;
+      if (!event.clipboardData) return;
+      event.preventDefault();
+      void importClipboard(event.clipboardData);
+    };
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [importClipboard]);
 
   const requestImportFiles = useCallback(async () => {
     if (!isDesktopRuntime()) {
@@ -998,13 +1119,22 @@ export function App() {
   }, [pageDefinition, selectedPanel, selectedPreset, updateActivePagePanels]);
 
   const runAutoLabel = useCallback((target: "page" | "selection", policy: ManualLabelPolicy) => {
-    updateActivePagePanels((current) => autoLabelPanels(current, {
-      rowToleranceMm: project.labelSettings.rowToleranceMm,
-      panelIds: target === "selection" ? selectedPanelIds : undefined,
-      manualPolicy: policy,
-    }), "Auto label panels");
+    commitDocument("Auto label panels", (current) => {
+      const startIndex = target === "page"
+        ? getPageLabelStartIndex(current.project.pages, activePageId, current.project.labelSettings)
+        : 0;
+      return {
+        ...current,
+        project: updateProjectPagePanels(current.project, activePageId, (pagePanels) => autoLabelPanels(pagePanels, {
+          rowToleranceMm: current.project.labelSettings.rowToleranceMm,
+          startIndex,
+          panelIds: target === "selection" ? selectedPanelIds : undefined,
+          manualPolicy: policy,
+        })),
+      };
+    });
     setPendingRelabel(null);
-  }, [project.labelSettings.rowToleranceMm, selectedPanelIds, updateActivePagePanels]);
+  }, [activePageId, commitDocument, selectedPanelIds]);
 
   const requestAutoLabel = useCallback((target: "page" | "selection") => {
     const hasManualLabels = panels.some((panel) => (
@@ -1241,6 +1371,19 @@ export function App() {
     }));
   }, [commitDocument]);
 
+  const updateActivePageMargins = useCallback((margins: PageMargins) => {
+    try {
+      commitDocument("Edit safe margins", (current) => ({
+        ...current,
+        project: updateProjectPageMargins(current.project, activePageId, margins),
+      }));
+      setPageActionError(null);
+      setAutoLayoutStatus("Safe margins updated. Auto Layout will use the new boundary.");
+    } catch (error) {
+      setPageActionError(error instanceof Error ? error.message : "Safe margins could not be updated.");
+    }
+  }, [activePageId, commitDocument]);
+
   const navigatePage = useCallback((offset: -1 | 1) => {
     const target = project.pages[activePageIndex + offset];
     if (target) setActivePageId(target.id);
@@ -1250,11 +1393,27 @@ export function App() {
     const pageId = createStableId("page");
     commitDocument("Add page", (current) => ({
       ...current,
-      project: appendA4Page(current.project, pageId),
+      project: appendPageToFigure(current.project, activePage.figureId, pageId),
+    }));
+    setActivePageId(pageId);
+    setPageActionError(null);
+  }, [activePage.figureId, commitDocument]);
+
+  const addFigure = useCallback(() => {
+    const pageId = createStableId("page");
+    const figureId = createStableId("figure");
+    commitDocument("Add figure", (current) => ({
+      ...current,
+      project: appendNewFigure(current.project, pageId, figureId),
     }));
     setActivePageId(pageId);
     setPageActionError(null);
   }, [commitDocument]);
+
+  const navigateToFigure = useCallback((figureId: string) => {
+    const target = projectFigures.find((figure) => figure.id === figureId)?.pages[0];
+    if (target) setActivePageId(target.id);
+  }, [projectFigures]);
 
   const duplicateActivePage = useCallback(() => {
     const pageId = createStableId("page");
@@ -1481,10 +1640,14 @@ export function App() {
     } else if (fix.kind === "relabel-page" && fix.pageId) {
       commitDocument("Review: relabel page", (current) => ({
         ...current,
-        project: updateProjectPagePanels(current.project, fix.pageId!, (pagePanels) => autoLabelPanels(pagePanels, {
-          rowToleranceMm: current.project.labelSettings.rowToleranceMm,
-          manualPolicy: "replace",
-        })),
+        project: updateProjectPagePanels(current.project, fix.pageId!, (pagePanels) => {
+          const startIndex = getPageLabelStartIndex(current.project.pages, fix.pageId!, current.project.labelSettings);
+          return autoLabelPanels(pagePanels, {
+            rowToleranceMm: current.project.labelSettings.rowToleranceMm,
+            startIndex,
+            manualPolicy: "replace",
+          });
+        }),
       }));
     } else if (fix.kind === "refresh-source" && fix.assetId) {
       const check = sourceChecksByAssetId.get(fix.assetId);
@@ -1548,7 +1711,7 @@ export function App() {
         ref={projectInputRef}
         className="visually-hidden"
         type="file"
-        accept=".figproj,application/json"
+        accept={`.figproj,${PORTABLE_PROJECT_MIME},application/zip,application/json`}
         onChange={handleProjectFileInput}
       />
       <input
@@ -1565,19 +1728,30 @@ export function App() {
         </div>
         <div className="document-actions" aria-label="Project file and history actions">
           <button onClick={startNewProject}>New</button>
-          <button onClick={() => void requestOpenProject()}>Open</button>
-          <button onClick={() => void saveProject(false)}>Save</button>
-          <button onClick={() => void saveProject(true)}>Save As</button>
+          <button title="Open a portable .figproj Figure project" onClick={() => void requestOpenProject()}>Import Figure</button>
+          <button disabled={isSavingProject} title="Save one portable .figproj with all original images" onClick={() => void saveProject(false)}>Save</button>
+          <button disabled={isSavingProject} title="Save a portable copy with all original images" onClick={() => void saveProject(true)}>Save As</button>
           <button aria-label="Undo" disabled={!canUndo(history)} onClick={performUndo}>Undo</button>
           <button aria-label="Redo" disabled={!canRedo(history)} onClick={performRedo}>Redo</button>
         </div>
         <div className="page-navigator" aria-label="Page navigation">
+          <select
+            className="figure-jump"
+            aria-label="Jump to figure"
+            value={activeFigure.id}
+            onChange={(event) => navigateToFigure(event.target.value)}
+          >
+            {projectFigures.map((figure, index) => (
+              <option key={figure.id} value={figure.id}>Figure {index + 1}</option>
+            ))}
+          </select>
           <button aria-label="Previous page" disabled={activePageIndex === 0} onClick={() => navigatePage(-1)}>‹</button>
           <div className="page-summary" aria-label="Current page">
             <span>Page {activePageIndex + 1} / {project.pages.length}</span><small>A4 portrait · 210 × 297 mm</small>
           </div>
           <button aria-label="Next page" disabled={activePageIndex === project.pages.length - 1} onClick={() => navigatePage(1)}>›</button>
           <button className="add-page-button" aria-label="Add page" title="Add A4 page" onClick={addPage}>+</button>
+          <button className="new-figure-button" onClick={addFigure}>New Figure</button>
         </div>
         <button
           className="primary-button"
@@ -1653,6 +1827,7 @@ export function App() {
                 pagePanelCount={panels.length}
                 projectPanelCount={allPanels.length}
                 status={autoLayoutStatus}
+                safeAreaLabel={formatMargins(pageMargins)}
                 onModeChange={(mode) => updateLayoutSettings({ mode })}
                 onGapChange={(gapMm) => updateLayoutSettings({ gapMm })}
                 onAutoPaginationChange={(autoPagination) => updateLayoutSettings({ autoPagination })}
@@ -1692,7 +1867,7 @@ export function App() {
               data-width-mm={pageDefinition.widthMm}
               data-height-mm={pageDefinition.heightMm}
               data-page-id={activePageId}
-              aria-label="A4 portrait page, 210 by 297 millimeters. Drop PNG, JPEG, SVG, or TIFF files here."
+              aria-label="A4 portrait page, 210 by 297 millimeters. Drop or paste PNG, JPEG, SVG, or TIFF images here."
               onDragEnter={(event) => { event.preventDefault(); setIsDragOver(true); }}
               onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }}
               onDragLeave={(event) => {
@@ -1707,13 +1882,18 @@ export function App() {
               {showMargins && (
                 <div
                   className="safe-margin"
-                  style={{ inset: pageDefinition.marginMm * metrics.pixelsPerMm }}
-                  aria-label="12 millimeter safe margin"
+                  style={{
+                    top: pageMargins.topMm * metrics.pixelsPerMm,
+                    right: pageMargins.rightMm * metrics.pixelsPerMm,
+                    bottom: pageMargins.bottomMm * metrics.pixelsPerMm,
+                    left: pageMargins.leftMm * metrics.pixelsPerMm,
+                  }}
+                  aria-label={`Safe margins: ${formatMargins(pageMargins)}`}
                 />
               )}
               {panels.length === 0 && (
                 <div className="page-placeholder" aria-hidden="true">
-                  <span>Drop panels here</span><small>PNG · JPEG · SVG · TIFF</small>
+                  <span>Drop files or paste from PowerPoint</span><small>PNG · JPEG · SVG · TIFF</small>
                 </div>
               )}
               {alignmentGuides.map((guide, index) => (
@@ -1797,7 +1977,7 @@ export function App() {
                           top: panel.label.offsetYmm * metrics.pixelsPerMm,
                           color: project.labelSettings.color,
                           fontFamily: project.labelSettings.fontFamily,
-                          fontSize: `${project.labelSettings.fontSizePt}pt`,
+                          fontSize: `${project.labelSettings.fontSizePt * 25.4 / 72 * metrics.pixelsPerMm}px`,
                           fontWeight: project.labelSettings.bold ? 700 : 400,
                           transform: "translateY(-100%)",
                         }}
@@ -1837,6 +2017,9 @@ export function App() {
               )}
               {isDragOver && <div className="drop-overlay">Release to import</div>}
             </div>
+            <div className="figure-page-caption" aria-label="Figure and page position">
+              Figure {activeFigureIndex + 1} · Page {activeFigurePageIndex + 1} of {activeFigure.pages.length}
+            </div>
           </div>
         </main>
 
@@ -1869,6 +2052,7 @@ export function App() {
               <h2 title={selectedAsset.sourceName}>{selectedAsset.sourceName}</h2>
               <p className="source-note">{selectedAsset.kind.toUpperCase()} · {selectedAsset.missing
                 ? "source missing"
+                : selectedAsset.sourceKind === "clipboard" ? `${selectedAsset.sourceApplication ?? "Unknown"} clipboard snapshot`
                 : selectedSourceCheck?.status === "changed" ? "source changed"
                   : selectedSourceCheck?.status === "unavailable" ? "automatic check unavailable"
                     : "source unchanged"}</p>
@@ -1884,13 +2068,13 @@ export function App() {
                     assetId: selectedAsset.id,
                   })}>Relink Source</button>
                 ) : (
-                  <div className="command-grid two-column">
+                  <div className={`command-grid${selectedAsset.sourceKind === "clipboard" ? "" : " two-column"}`}>
                     <button onClick={() => requestSourceFile({
                       kind: "replace",
                       panelId: selectedPanel.id,
                       assetId: selectedAsset.id,
                     })}>Replace Source</button>
-                    <button onClick={() => refreshSelectedSource(selectedPanel, selectedAsset)}>Refresh Source</button>
+                    {selectedAsset.sourceKind !== "clipboard" && <button onClick={() => refreshSelectedSource(selectedPanel, selectedAsset)}>Refresh Source</button>}
                   </div>
                 )}
                 {selectedSourceCheck?.message && <small className="source-capability-note">{selectedSourceCheck.message}</small>}
@@ -1904,7 +2088,7 @@ export function App() {
               <dl className="property-list preset-properties">
                 <div><dt>Preset</dt><dd>{selectedType.name}</dd></div>
                 <div className="scale-property">
-                  <dt><label htmlFor="panel-scale">Scale</label></dt>
+                  <dt><label htmlFor="panel-scale">PPT scale</label></dt>
                   <dd>
                     <input
                       id="panel-scale"
@@ -1923,6 +2107,9 @@ export function App() {
                 <div><dt>Height</dt><dd>{formatMm(selectedPanel.geometry.heightMm)}</dd></div>
                 <div><dt>Ratio</dt><dd>{selectedPanel.aspectRatioLocked ? "Locked" : "Unlocked"}</dd></div>
               </dl>
+              {selectedAsset.sourceKind === "clipboard" && (
+                <ClipboardSourceQuality asset={selectedAsset} panel={selectedPanel} />
+              )}
               <section className="label-inspector-section">
                 <div className="section-heading">
                   <strong>Panel label</strong>
@@ -1945,13 +2132,33 @@ export function App() {
                     onChange={(event) => updateSelectedLabel((panel) => updatePanelLabelVisibility(panel, event.target.checked))}
                   />
                 </label>
-                <details className="label-offset-details">
-                  <summary>Label position</summary>
+                <details className="label-offset-details" open>
+                  <summary>Label position · this panel</summary>
+                  <p className="label-offset-help">
+                    Relative to the image top-left. Negative X moves left; negative Y moves up.
+                  </p>
                   <div className="label-offset-grid">
-                    <label>Offset X<input type="number" step="0.5" value={selectedPanel.label.offsetXmm} onChange={(event) => updateSelectedLabel((panel) => updatePanelLabelOffset(panel, Number(event.target.value), panel.label.offsetYmm))} /></label>
-                    <label>Offset Y<input type="number" step="0.5" value={selectedPanel.label.offsetYmm} onChange={(event) => updateSelectedLabel((panel) => updatePanelLabelOffset(panel, panel.label.offsetXmm, Number(event.target.value)))} /></label>
+                    <label>
+                      Horizontal (X)
+                      <span className="number-with-unit">
+                        <input aria-label="Panel label offset X" type="number" step="0.5" value={selectedPanel.label.offsetXmm} onChange={(event) => updateSelectedLabel((panel) => updatePanelLabelOffset(panel, Number(event.target.value), panel.label.offsetYmm))} />
+                        <small>mm</small>
+                      </span>
+                    </label>
+                    <label>
+                      Vertical (Y)
+                      <span className="number-with-unit">
+                        <input aria-label="Panel label offset Y" type="number" step="0.5" value={selectedPanel.label.offsetYmm} onChange={(event) => updateSelectedLabel((panel) => updatePanelLabelOffset(panel, panel.label.offsetXmm, Number(event.target.value)))} />
+                        <small>mm</small>
+                      </span>
+                    </label>
                   </div>
-                  <button className="reset-preset-button" onClick={() => updateSelectedLabel((panel) => resetPanelLabelOffset(panel, project.labelSettings))}>Use project offset</button>
+                  <div className="label-offset-footer">
+                    <small>{selectedPanel.label.offsetMode === "manual" ? "Manual position" : "Using project default"}</small>
+                    <button className="reset-preset-button" disabled={selectedPanel.label.offsetMode === "automatic"} onClick={() => updateSelectedLabel((panel) => resetPanelLabelOffset(panel, project.labelSettings))}>
+                      Use project default ({formatMm(project.labelSettings.defaultOffsetXmm)}, {formatMm(project.labelSettings.defaultOffsetYmm)})
+                    </button>
+                  </div>
                 </details>
               </section>
               <div className={`preset-status ${selectedFollowsPreset ? "following" : "modified"}`}>
@@ -1977,23 +2184,30 @@ export function App() {
           ) : (
             <PageInspector
               pageName={activePage.name}
+              margins={pageMargins}
               showGrid={showGrid}
               showMargins={showMargins}
               panelCount={panels.length}
               labelSettings={project.labelSettings}
               onGridChange={setShowGrid}
               onMarginsChange={setShowMargins}
+              onMarginsUpdate={updateActivePageMargins}
               onAutoLabel={() => requestAutoLabel("page")}
               onLabelSettingsChange={updateLabelSettings}
               onCommitDefaultOffsets={commitDefaultLabelOffsets}
-              pageIndex={activePageIndex}
               pageCount={project.pages.length}
+              figureNumber={activeFigureIndex + 1}
+              figurePageNumber={activeFigurePageIndex + 1}
+              figurePageCount={activeFigure.pages.length}
               autoPagination={autoPagination}
               onAddPage={addPage}
+              onAddFigure={addFigure}
               onDuplicatePage={duplicateActivePage}
               onDeletePage={requestDeleteActivePage}
               onMovePageEarlier={() => reorderActivePage(-1)}
               onMovePageLater={() => reorderActivePage(1)}
+              canMovePageEarlier={canMovePageEarlier}
+              canMovePageLater={canMovePageLater}
             />
           )}
         </aside>
@@ -2003,7 +2217,7 @@ export function App() {
         <div className="dialog-backdrop" role="presentation">
           <div className="relabel-dialog export-dialog" role="dialog" aria-modal="true" aria-labelledby="pptx-export-title">
             <h2 id="pptx-export-title">Export editable PowerPoint</h2>
-            <p>Each Figure Composer page becomes one A4 slide. Panels and labels stay as independent objects.</p>
+            <p>All Figures are exported together in one PowerPoint. Each Figure Composer page becomes one A4 slide, with panels and labels as independent objects.</p>
             <div className={`export-review-summary${reviewSummary.errors ? " has-errors" : reviewSummary.warnings ? " has-warnings" : " passed"}`}>
               <strong>{reviewSummary.errors > 0
                 ? `${reviewSummary.errors} review ${reviewSummary.errors === 1 ? "error" : "errors"}`
@@ -2019,7 +2233,7 @@ export function App() {
                   checked={pptxExportScope === "all"}
                   onChange={() => setPptxExportScope("all")}
                 />
-                <span><strong>All pages</strong><small>{project.pages.length} slides in project order</small></span>
+                <span><strong>All Figures</strong><small>{projectFigures.length} {projectFigures.length === 1 ? "figure" : "figures"} · {project.pages.length} slides in project order</small></span>
               </label>
               <label>
                 <input
@@ -2215,6 +2429,7 @@ interface AutoLayoutSidebarProps {
   readonly pagePanelCount: number;
   readonly projectPanelCount: number;
   readonly status: string | null;
+  readonly safeAreaLabel: string;
   readonly onModeChange: (mode: AutoLayoutMode) => void;
   readonly onGapChange: (gapMm: number) => void;
   readonly onAutoPaginationChange: (enabled: boolean) => void;
@@ -2231,6 +2446,7 @@ function AutoLayoutSidebar({
   pagePanelCount,
   projectPanelCount,
   status,
+  safeAreaLabel,
   onModeChange,
   onGapChange,
   onAutoPaginationChange,
@@ -2271,7 +2487,7 @@ function AutoLayoutSidebar({
           <input type="checkbox" checked={allowMinorScaling} onChange={(event) => onAllowMinorScalingChange(event.target.checked)} />
         </label>
       </details>
-      <p className="format-hint">Uses current panel order, preset sizes, and the 12 mm safe area.</p>
+      <p className="format-hint">Uses current panel order, preset sizes, and the page safe area ({safeAreaLabel}).</p>
       {status && <p className="auto-layout-status" role="status">{status}</p>}
     </div>
   );
@@ -2315,6 +2531,57 @@ function ReviewSidebar({ findings, summary, isCheckingSources, onCheckSources, o
       )}
       <p className="format-hint">Review findings never change scientific content automatically.</p>
     </div>
+  );
+}
+
+function ClipboardSourceQuality({ asset, panel }: { readonly asset: ImportedAsset; readonly panel: Panel }) {
+  const diagnostics = asset.clipboardDiagnostics;
+  if (!diagnostics) {
+    return (
+      <details className="source-quality-details">
+        <summary>SOURCE QUALITY</summary>
+        <p className="source-quality-unknown">Diagnostics unavailable for this earlier clipboard import.</p>
+      </details>
+    );
+  }
+  const dpi = diagnostics.qualityClass === "vector"
+    || diagnostics.pixelWidth === undefined
+    || diagnostics.pixelHeight === undefined
+    ? null
+    : effectiveDpi(panel, diagnostics.pixelWidth, diagnostics.pixelHeight);
+  return (
+    <details className="source-quality-details">
+      <summary>SOURCE QUALITY</summary>
+      <dl className="source-quality-grid">
+        <div><dt>Source</dt><dd>Clipboard</dd></div>
+        <div><dt>Application</dt><dd>{asset.sourceApplication ?? "Unknown"}</dd></div>
+        <div><dt>Selected source</dt><dd>{formatAssetFormat(diagnostics.selectedFormat)}</dd></div>
+        <div><dt>Quality</dt><dd>{formatQualityClass(diagnostics.qualityClass)}</dd></div>
+        {diagnostics.pixelWidth !== undefined && diagnostics.pixelHeight !== undefined && (
+          <div><dt>Source pixels</dt><dd>{diagnostics.pixelWidth} × {diagnostics.pixelHeight} px</dd></div>
+        )}
+        {diagnostics.physicalWidthMm !== undefined && diagnostics.physicalHeightMm !== undefined && (
+          <div><dt>Clipboard size</dt><dd>{formatMm(diagnostics.physicalWidthMm)} × {formatMm(diagnostics.physicalHeightMm)}</dd></div>
+        )}
+        <div><dt>Displayed size</dt><dd>{formatMm(panel.geometry.widthMm)} × {formatMm(panel.geometry.heightMm)}</dd></div>
+        <div><dt>Effective DPI</dt><dd>{dpi === null ? "N/A" : `${Math.round(dpi)} dpi`}</dd></div>
+        <div><dt>Canonical</dt><dd>{formatAssetFormat(diagnostics.canonicalFormat)}</dd></div>
+        <div><dt>Preview</dt><dd>{diagnostics.previewConverted
+          ? `Converted to ${formatAssetFormat(diagnostics.previewFormat)}`
+          : `Direct (${formatAssetFormat(diagnostics.previewFormat)})`}</dd></div>
+      </dl>
+      {diagnostics.qualityClass === "bitmap-fallback" && (
+        <p className="source-quality-warning">⚠ Clipboard supplied only a raster fallback. For highest fidelity, native Windows clipboard support may provide EMF/WMF in the desktop version.</p>
+      )}
+      <details className="clipboard-formats-debug">
+        <summary>Available clipboard formats</summary>
+        {diagnostics.availableFormats.length > 0 ? (
+          <ul>{diagnostics.availableFormats.map((format) => <li key={format}>{format}</li>)}</ul>
+        ) : (
+          <p>Unknown</p>
+        )}
+      </details>
+    </details>
   );
 }
 
@@ -2364,7 +2631,7 @@ function AssetsSidebar({
         onChange={onFileInput}
       />
       <button className="import-button" onClick={onImport}>＋ Import files</button>
-      <p className="format-hint">PNG, JPEG, SVG, or TIFF · filename types inferred</p>
+      <p className="format-hint">PNG, JPEG, SVG, or TIFF · Ctrl/Cmd+V pastes one clipboard panel</p>
       <div className="source-check-actions">
         <button disabled={isCheckingSources || assetsById.size === 0} onClick={onCheckSources}>
           {isCheckingSources ? "Checking…" : "Check Sources"}
@@ -2385,8 +2652,8 @@ function AssetsSidebar({
       {panels.length === 0 ? (
         <div className="empty-state compact">
           <span className="empty-icon" aria-hidden="true">⇩</span>
-          <strong>Drop files onto the A4 page</strong>
-          <p>Each file becomes a typed independent panel.</p>
+          <strong>Drop files or paste from PowerPoint</strong>
+          <p>Each file becomes a typed panel; one paste becomes one unclassified panel.</p>
           <ol className="onboarding-steps">
             <li>Import figure files</li>
             <li>Arrange and review panels</li>
@@ -2656,12 +2923,14 @@ function MultiSelectionInspector({
 
 interface PageInspectorProps {
   readonly pageName: string;
+  readonly margins: PageMargins;
   readonly panelCount: number;
   readonly showGrid: boolean;
   readonly showMargins: boolean;
   readonly labelSettings: ProjectLabelSettings;
   readonly onGridChange: (value: boolean) => void;
   readonly onMarginsChange: (value: boolean) => void;
+  readonly onMarginsUpdate: (margins: PageMargins) => void;
   readonly onAutoLabel: () => void;
   readonly onLabelSettingsChange: (update: Partial<ProjectLabelSettings>) => void;
   readonly onCommitDefaultOffsets: (
@@ -2669,56 +2938,81 @@ interface PageInspectorProps {
     defaultOffsetYmm: number,
     applyToExistingAutomaticLabels: boolean,
   ) => void;
-  readonly pageIndex: number;
   readonly pageCount: number;
+  readonly figureNumber: number;
+  readonly figurePageNumber: number;
+  readonly figurePageCount: number;
   readonly autoPagination: boolean;
   readonly onAddPage: () => void;
+  readonly onAddFigure: () => void;
   readonly onDuplicatePage: () => void;
   readonly onDeletePage: () => void;
   readonly onMovePageEarlier: () => void;
   readonly onMovePageLater: () => void;
+  readonly canMovePageEarlier: boolean;
+  readonly canMovePageLater: boolean;
 }
 
 function PageInspector({
   pageName,
+  margins,
   panelCount,
   showGrid,
   showMargins,
   labelSettings,
   onGridChange,
   onMarginsChange,
+  onMarginsUpdate,
   onAutoLabel,
   onLabelSettingsChange,
   onCommitDefaultOffsets,
-  pageIndex,
   pageCount,
+  figureNumber,
+  figurePageNumber,
+  figurePageCount,
   autoPagination,
   onAddPage,
+  onAddFigure,
   onDuplicatePage,
   onDeletePage,
   onMovePageEarlier,
   onMovePageLater,
+  canMovePageEarlier,
+  canMovePageLater,
 }: PageInspectorProps) {
   const [offsetDraft, setOffsetDraft] = useState(() => ({
     xMm: labelSettings.defaultOffsetXmm,
     yMm: labelSettings.defaultOffsetYmm,
   }));
+  const [marginDraft, setMarginDraft] = useState<PageMargins>(margins);
   useEffect(() => {
     setOffsetDraft({
       xMm: labelSettings.defaultOffsetXmm,
       yMm: labelSettings.defaultOffsetYmm,
     });
   }, [labelSettings.defaultOffsetXmm, labelSettings.defaultOffsetYmm]);
+  useEffect(() => {
+    setMarginDraft(margins);
+  }, [margins.topMm, margins.rightMm, margins.bottomMm, margins.leftMm]);
   const offsetChanged = offsetDraft.xMm !== labelSettings.defaultOffsetXmm
     || offsetDraft.yMm !== labelSettings.defaultOffsetYmm;
+  const marginChanged = marginDraft.topMm !== margins.topMm
+    || marginDraft.rightMm !== margins.rightMm
+    || marginDraft.bottomMm !== margins.bottomMm
+    || marginDraft.leftMm !== margins.leftMm;
+  const marginDraftValid = [marginDraft.topMm, marginDraft.rightMm, marginDraft.bottomMm, marginDraft.leftMm]
+    .every((value) => Number.isFinite(value) && value >= 0)
+    && marginDraft.leftMm + marginDraft.rightMm < 210
+    && marginDraft.topMm + marginDraft.bottomMm < 297;
   return (
     <>
       <p className="eyebrow">Page</p>
-      <h2>{pageName} · A4 Portrait</h2>
+      <h2>Figure {figureNumber} · {pageName}</h2>
+      <p className="source-note">Figure page {figurePageNumber} of {figurePageCount} · A4 Portrait</p>
       <dl className="property-list">
         <div><dt>Width</dt><dd>210 mm</dd></div>
         <div><dt>Height</dt><dd>297 mm</dd></div>
-        <div><dt>Margins</dt><dd>12 mm</dd></div>
+        <div><dt>Margins</dt><dd>{formatMargins(margins)}</dd></div>
         <div><dt>Grid</dt><dd>1 mm</dd></div>
       </dl>
       <button className="auto-label-button" disabled={panelCount === 0} onClick={onAutoLabel}>Auto Label Page</button>
@@ -2727,16 +3021,45 @@ function PageInspector({
         <div className="command-grid two-column">
           <button onClick={onAddPage}>Add Page</button>
           <button onClick={onDuplicatePage}>Duplicate</button>
-          <button disabled={pageIndex === 0} onClick={onMovePageEarlier}>Move Earlier</button>
-          <button disabled={pageIndex === pageCount - 1} onClick={onMovePageLater}>Move Later</button>
+          <button disabled={!canMovePageEarlier} onClick={onMovePageEarlier}>Move Earlier</button>
+          <button disabled={!canMovePageLater} onClick={onMovePageLater}>Move Later</button>
         </div>
+        <button className="new-figure-action" onClick={onAddFigure}>New Figure</button>
         <button className="page-delete-button" disabled={pageCount === 1} onClick={onDeletePage}>Delete Page</button>
       </section>
       <div className="inspector-section">
         <label className="toggle-row">
-          <span><strong>Safe margins</strong><small>12 mm on every edge</small></span>
+          <span><strong>Safe margins</strong><small>{formatMargins(margins)}</small></span>
           <input type="checkbox" checked={showMargins} onChange={(event) => onMarginsChange(event.target.checked)} />
         </label>
+        <details className="margin-settings" open>
+          <summary>Edit safe margins</summary>
+          <div className="margin-settings-grid">
+            {(["topMm", "rightMm", "bottomMm", "leftMm"] as const).map((key) => (
+              <label key={key}>
+                {key.replace("Mm", "").replace(/^./, (value) => value.toUpperCase())}
+                <span className="millimeter-input">
+                  <input
+                    aria-label={`${key.replace("Mm", "")} safe margin`}
+                    type="number"
+                    min="0"
+                    max={key === "leftMm" || key === "rightMm" ? 104.5 : 148}
+                    step="0.5"
+                    value={marginDraft[key]}
+                    onChange={(event) => setMarginDraft((current) => ({ ...current, [key]: Number(event.target.value) }))}
+                  />
+                  <small>mm</small>
+                </span>
+              </label>
+            ))}
+          </div>
+          <div className="margin-settings-actions">
+            <button disabled={!marginChanged || !marginDraftValid} onClick={() => onMarginsUpdate(marginDraft)}>Apply</button>
+            <button className="plain" disabled={!marginChanged} onClick={() => setMarginDraft(margins)}>Reset</button>
+          </div>
+          {!marginDraftValid && <small className="margin-settings-error">Margins must leave a positive area on the page.</small>}
+          <small>Auto Layout starts at these guides and stays inside them.</small>
+        </details>
         <label className="toggle-row">
           <span><strong>Grid</strong><small>1 mm with 5 mm majors</small></span>
           <input type="checkbox" checked={showGrid} onChange={(event) => onGridChange(event.target.checked)} />
@@ -2744,6 +3067,9 @@ function PageInspector({
       </div>
       <details>
         <summary>Label settings</summary>
+        <p className="label-offset-help">
+          Default position for automatic labels, measured from each image top-left. Negative X moves left; negative Y moves up.
+        </p>
         <div className="label-settings-grid">
           <label>
             Font
@@ -2758,17 +3084,33 @@ function PageInspector({
           </label>
           <label>Size<input type="number" min="6" max="72" step="1" value={labelSettings.fontSizePt} onChange={(event) => onLabelSettingsChange({ fontSizePt: Number(event.target.value) })} /></label>
           <label className="settings-check"><span>Bold</span><input type="checkbox" checked={labelSettings.bold} onChange={(event) => onLabelSettingsChange({ bold: event.target.checked })} /></label>
-          <label>Offset X<input aria-label="Default label offset X" type="number" step="0.5" value={offsetDraft.xMm} onChange={(event) => setOffsetDraft((current) => ({ ...current, xMm: Number(event.target.value) }))} /></label>
-          <label>Offset Y<input aria-label="Default label offset Y" type="number" step="0.5" value={offsetDraft.yMm} onChange={(event) => setOffsetDraft((current) => ({ ...current, yMm: Number(event.target.value) }))} /></label>
-          <label className="settings-wide">Sequence<select value={labelSettings.sequenceMode} onChange={(event) => onLabelSettingsChange({ sequenceMode: event.target.value as LabelSequenceMode })}><option value="continuous">Continuous across project</option><option value="restart-per-page">Restart each page</option></select></label>
+          <label>
+            Default X
+            <span className="number-with-unit">
+              <input aria-label="Default label offset X" type="number" step="0.5" value={offsetDraft.xMm} onChange={(event) => setOffsetDraft((current) => ({ ...current, xMm: Number(event.target.value) }))} />
+              <small>mm</small>
+            </span>
+          </label>
+          <label>
+            Default Y
+            <span className="number-with-unit">
+              <input aria-label="Default label offset Y" type="number" step="0.5" value={offsetDraft.yMm} onChange={(event) => setOffsetDraft((current) => ({ ...current, yMm: Number(event.target.value) }))} />
+              <small>mm</small>
+            </span>
+          </label>
+          <label className="settings-wide">Sequence<select value={labelSettings.sequenceMode} onChange={(event) => onLabelSettingsChange({ sequenceMode: event.target.value as LabelSequenceMode })}><option value="continuous">Continue within Figure</option><option value="restart-per-page">Restart each page</option></select></label>
         </div>
         {offsetChanged && (
           <div className="preset-decision label-offset-decision" role="alert">
-            <strong>Apply changed default offsets?</strong>
+            <strong>Offsets edited — choose where to apply them</strong>
+            <small>The preview will not move until you choose an option.</small>
             <button onClick={() => onCommitDefaultOffsets(offsetDraft.xMm, offsetDraft.yMm, true)}>Apply to automatic labels</button>
-            <button onClick={() => onCommitDefaultOffsets(offsetDraft.xMm, offsetDraft.yMm, false)}>Future automatic labels only</button>
+            <button onClick={() => onCommitDefaultOffsets(offsetDraft.xMm, offsetDraft.yMm, false)}>Save as future default only</button>
             <button className="plain" onClick={() => setOffsetDraft({ xMm: labelSettings.defaultOffsetXmm, yMm: labelSettings.defaultOffsetYmm })}>Cancel</button>
           </div>
+        )}
+        {!offsetChanged && (
+          <small className="label-offset-status">Current automatic labels use this default. Select one image to set a manual position for only that label.</small>
         )}
       </details>
     </>
@@ -2814,6 +3156,25 @@ function MoveToPageControl({ pages, activePageId, selectedCount, onMove }: MoveT
 
 function formatMm(value: number): string {
   return `${value.toFixed(1).replace(/\.0$/, "")} mm`;
+}
+
+function formatMargins(margins: PageMargins): string {
+  if (margins.topMm === margins.rightMm
+    && margins.topMm === margins.bottomMm
+    && margins.topMm === margins.leftMm) {
+    return `${formatMm(margins.topMm)} every edge`;
+  }
+  return `T ${formatMm(margins.topMm)} · R ${formatMm(margins.rightMm)} · B ${formatMm(margins.bottomMm)} · L ${formatMm(margins.leftMm)}`;
+}
+
+function formatAssetFormat(format: string): string {
+  return format.toUpperCase();
+}
+
+function formatQualityClass(qualityClass: NonNullable<ImportedAsset["qualityClass"]>): string {
+  return qualityClass === "vector" ? "Vector"
+    : qualityClass === "lossless-raster" ? "Lossless raster"
+      : qualityClass === "lossy-raster" ? "Lossy raster" : "Bitmap fallback";
 }
 
 function safeFileStem(value: string): string {

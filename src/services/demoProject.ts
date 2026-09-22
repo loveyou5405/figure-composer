@@ -16,7 +16,11 @@ const DEMO_ITEMS = [
 
 export function createDemoProject(): EditorDocument {
   const initial = createInitialEditorDocument();
-  const pages = [createA4Page(1, "demo-page-1"), createA4Page(2, "demo-page-2"), createA4Page(3, "demo-page-3")];
+  const pages = [
+    createA4Page(1, "demo-page-1", "demo-figure-1"),
+    createA4Page(2, "demo-page-2", "demo-figure-1"),
+    createA4Page(3, "demo-page-3", "demo-figure-1"),
+  ];
   const assets: ImportedAsset[] = [];
   const panelsByPage: Panel[][] = [[], [], []];
 

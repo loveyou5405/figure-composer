@@ -2,8 +2,10 @@ import type { ImportedAsset, SupportedAssetKind } from "./asset";
 import type { EditorDocument, AutoLayoutPreferences } from "./editorDocument";
 import type { ProjectLabelSettings } from "./labels";
 import { A4_PORTRAIT } from "./page";
+import { getPageMargins, validatePageMargins } from "./page";
+import { getPowerPointReferenceSizeMm } from "./panel";
 import type { PanelPreset, PanelTypeDefinition } from "./preset";
-import { getProjectOwnershipErrors, type FigureProject } from "./project";
+import { getProjectOwnershipErrors, normalizeProjectFigureIds, type FigureProject } from "./project";
 
 export const PROJECT_SCHEMA_VERSION = "0.1.0";
 export const PROJECT_FILE_EXTENSION = ".figproj";
@@ -69,15 +71,30 @@ export function deserializeProjectFile(
   }
   const migrated = applyProjectMigrations(parsed, migrations);
   const file = parseProjectFile(migrated);
+  const normalizedProject = normalizeProjectFigureIds(file.project);
   const liveByFingerprint = new Map(availableAssets.map((asset) => [assetFingerprint(asset), asset]));
-  const document: EditorDocument = {
-    project: file.project,
-    assets: file.assets.map((reference) => {
+  const assets: ImportedAsset[] = file.assets.map((reference) => {
       const live = liveByFingerprint.get(assetFingerprint(reference));
       return live
         ? { ...reference, previewUrl: live.previewUrl, missing: false }
         : { ...reference, previewUrl: "", missing: true };
-    }),
+    });
+  const scaleReferenceByAssetId = new Map(assets.map((asset) => [
+    asset.id,
+    getPowerPointReferenceSizeMm(asset.intrinsicWidthPx, asset.intrinsicHeightPx),
+  ]));
+  const document: EditorDocument = {
+    project: {
+      ...normalizedProject,
+      pages: normalizedProject.pages.map((page) => ({
+        ...page,
+        panels: page.panels.map((panel) => ({
+          ...panel,
+          baseSizeMm: scaleReferenceByAssetId.get(panel.assetId) ?? panel.baseSizeMm,
+        })),
+      })),
+    },
+    assets,
     types: file.panelTypes,
     presets: file.presets,
     layoutSettings: file.layoutSettings,
@@ -184,9 +201,20 @@ function parseProjectFile(source: unknown): FigureProjectFile {
       || !isRecord(page.definition) || !Array.isArray(page.panels)) {
       throw new Error(`Page ${pageIndex + 1} is invalid.`);
     }
+    if ("figureId" in page && (typeof page.figureId !== "string" || !page.figureId.trim())) {
+      throw new Error(`Page ${pageIndex + 1} Figure ID is invalid.`);
+    }
     const definition = page.definition;
     if (![definition.widthMm, definition.heightMm, definition.marginMm, definition.gridMm].every(Number.isFinite)) {
       throw new Error(`Page ${pageIndex + 1} definition is invalid.`);
+    }
+    if (definition.marginsMm !== undefined) {
+      if (!isRecord(definition.marginsMm)) throw new Error(`Page ${pageIndex + 1} safe margins are invalid.`);
+      try {
+        validatePageMargins(definition as unknown as typeof A4_PORTRAIT, getPageMargins(definition as unknown as typeof A4_PORTRAIT));
+      } catch {
+        throw new Error(`Page ${pageIndex + 1} safe margins are invalid.`);
+      }
     }
     page.panels.forEach((panel, panelIndex) => {
       if (!isRecord(panel) || typeof panel.id !== "string" || typeof panel.pageId !== "string"

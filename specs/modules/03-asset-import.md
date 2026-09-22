@@ -1,10 +1,10 @@
 # Asset Import
 
 Module: Asset Import  
-Spec version: 0.7.0  
-Implementation status: Milestones 9 and 12 source lifecycle implemented  
-Last updated: 2026-09-16  
-Depends on: Project Model, Canvas Preview, ADR-006 Source Binding and Refresh
+Spec version: 1.0.0
+Implementation status: Source lifecycle, web clipboard provider, and portable exact-source ownership implemented; native clipboard provider deferred
+Last updated: 2026-09-22
+Depends on: Project Model, Canvas Preview, ADR-006 Source Binding and Refresh, Clipboard Import
 
 ## 1. Responsibility
 
@@ -36,7 +36,7 @@ One invalid file must not cancel valid siblings. Report failures per file and re
 
 ## 8. Persistence requirements
 
-`.figproj` stores stable IDs and source fingerprint metadata, never browser object URLs, source bytes, handles, embedded secrets, or automatic cloud copies. Tauri imports also store the user-selected local path and attempt to restore it on Open; unavailable assets remain explicit missing references until relinked.
+Portable `.figproj` stores stable IDs, source fingerprint metadata, and exact original source bytes as separate verified archive entries; it never stores browser object URLs, live handles, embedded secrets, or automatic cloud copies. Import Figure rebuilds session previews from those embedded bytes. Legacy JSON projects may still use Tauri-selected local paths for best-effort source restoration; unavailable assets remain explicit missing references until relinked.
 
 ## 9. Testing requirements
 
@@ -57,9 +57,13 @@ Test import formats, decoding, unique IDs, order, inference, vector preview, sam
 
 ## 11. Known limitations
 
-Additional TIFF pages, PDF, EPS, folders, clipboard images, and remote URLs are unsupported. TIFF previews are rasterized because browsers do not reliably render TIFF directly. Browser input/drop files are immutable snapshots and cannot observe later disk edits; Check Sources reports them as unavailable and explicit reselection remains available. Batch folder relink remains unsupported. Desktop paths are best-effort and do not follow files moved outside the application.
+Additional TIFF pages, PDF, EPS, folders, clipboard images, and remote URLs are unsupported in the implemented importer. TIFF previews are rasterized because browsers do not reliably render TIFF directly. Browser input/drop files are immutable snapshots and cannot observe later disk edits; Check Sources reports them as unavailable and explicit reselection remains available. Batch folder relink remains unsupported. Desktop paths are best-effort and do not follow files moved outside the application.
 
-## 12. Changelog
+## 12. Clipboard integration
+
+The implemented `WebClipboardProvider` in `13-clipboard-import.md` reuses asset registration without pretending a clipboard payload is a normal file path. It ranks browser-exposed SVG/TIFF/PNG/JPEG representations by information fidelity, records clipboard/source quality metadata, defaults scientific type to Other, and imports one paste as one panel. The future native provider extends the same boundary to EMF/WMF/DIB while keeping canonical bytes separate from disposable previews.
+
+## 13. Changelog
 
 - 0.1.0: Initial planned contract.
 - 0.2.0: Implemented local multi-file PNG/JPEG/SVG picker and A4 drop import with partial-failure reporting.
@@ -68,3 +72,6 @@ Additional TIFF pages, PDF, EPS, folders, clipboard images, and remote URLs are 
 - 0.5.0: Added local, non-destructive TIF/TIFF first-page decoding with PNG preview generation and a 100-megapixel safety limit.
 - 0.6.0: Added explicit Replace/Refresh/Relink, deterministic aspect handling, source fingerprints, capability-aware checking, batch Refresh Changed, and atomic history integration.
 - 0.7.0: Added native Tauri picker routing, persistent selected paths, and best-effort source restoration on project Open.
+- 0.8.0: Added the planned high-fidelity clipboard provider contract and canonical-versus-preview asset rules without claiming implementation.
+- 0.9.0: Implemented browser/WebView Ctrl/Cmd+V for exposed SVG/TIFF/PNG/JPEG payloads with quality metadata and active-page ownership.
+- 1.0.0: Embedded exact source bytes in portable `.figproj` and rebuilt previews/source bindings from verified package entries on Import Figure.

@@ -5,12 +5,16 @@ import { createDefaultPanelLabel } from "../src/domain/labels";
 import type { Panel } from "../src/domain/panel";
 import {
   appendA4Page,
+  appendNewFigure,
+  appendPageToFigure,
   deleteProjectPage,
   duplicateProjectPage,
   getProjectOwnershipErrors,
+  getProjectFigures,
   movePanelsToPage,
   reorderProjectPage,
   updateProjectPagePanels,
+  updateProjectPageMargins,
   createInitialProject,
 } from "../src/domain/project";
 
@@ -36,6 +40,38 @@ describe("page management", () => {
       [project.pages[0].id, "Page 1"],
       ["page-2", "Page 2"],
     ]);
+  });
+
+  it("continues the active figure for a normal page and starts a distinct new figure", () => {
+    const initial = createInitialProject();
+    const figure1 = initial.pages[0].figureId;
+    let project = appendPageToFigure(initial, figure1, "page-2");
+    project = appendNewFigure(project, "page-3", "figure-2");
+    project = appendPageToFigure(project, "figure-2", "page-4");
+    expect(getProjectFigures(project).map((figure) => [figure.id, figure.pages.map((page) => page.id)])).toEqual([
+      [figure1, [initial.pages[0].id, "page-2"]],
+      ["figure-2", ["page-3", "page-4"]],
+    ]);
+    expect(getProjectOwnershipErrors(project)).toEqual([]);
+  });
+
+  it("updates one page's safe margins without changing other pages", () => {
+    const project = appendA4Page(createInitialProject(), "page-2");
+    const firstId = project.pages[0].id;
+    const updated = updateProjectPageMargins(project, firstId, {
+      topMm: 10,
+      rightMm: 14,
+      bottomMm: 18,
+      leftMm: 16,
+    });
+    expect(updated.pages[0].definition.marginsMm).toEqual({
+      topMm: 10,
+      rightMm: 14,
+      bottomMm: 18,
+      leftMm: 16,
+    });
+    expect(updated.pages[1]).toBe(project.pages[1]);
+    expect(getProjectOwnershipErrors(updated)).toEqual([]);
   });
 
   it("deletes an empty page and renumbers display names", () => {
@@ -91,6 +127,11 @@ describe("page management", () => {
     expect(reordered.pages[0].panels[0].pageId).toBe("page-2");
   });
 
+  it("prevents page reordering across figure boundaries", () => {
+    const project = appendNewFigure(createInitialProject(), "figure-2-page-1", "figure-2");
+    expect(() => reorderProjectPage(project, project.pages[0].id, 1)).toThrow(/within the same figure/);
+  });
+
   it("moves one panel to the next page at the top safe margin while preserving metadata", () => {
     let project = appendA4Page(createInitialProject(), "page-2");
     const firstId = project.pages[0].id;
@@ -140,6 +181,18 @@ describe("page management", () => {
     const arranged = autoArrangeProject(project, { target: "project", activePageId: "page-2" });
     expect(arranged.project.pages.map((page) => page.id)).toEqual(orderedIds);
     expect(arranged.project.pages.flatMap((page) => page.panels.map((panel) => panel.id))).toEqual(["b", "a"]);
+  });
+
+  it("keeps project Auto Layout panels inside their own figures", () => {
+    let project = appendNewFigure(createInitialProject(), "figure-2-page-1", "figure-2");
+    const figure1Page = project.pages[0];
+    project = updateProjectPagePanels(project, figure1Page.id, () => [makePanel("f1-a", figure1Page.id, 20, 30)]);
+    project = updateProjectPagePanels(project, "figure-2-page-1", () => [makePanel("f2-a", "figure-2-page-1", 30, 40)]);
+    const arranged = autoArrangeProject(project, { target: "project", activePageId: figure1Page.id });
+    expect(arranged.applied).toBe(true);
+    arranged.project.pages.forEach((page) => {
+      expect(page.panels.every((panel) => panel.id.startsWith(page.figureId === "figure-2" ? "f2-" : "f1-"))).toBe(true);
+    });
   });
 
   it("undoes a complete page operation as one history transaction", () => {

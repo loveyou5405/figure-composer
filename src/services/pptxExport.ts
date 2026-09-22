@@ -1,6 +1,7 @@
 import type { ImportedAsset } from "../domain/asset";
 import type { EditorDocument } from "../domain/editorDocument";
 import type { PanelGeometry } from "../domain/panel";
+import { getProjectFigures } from "../domain/project";
 import { validateDocument } from "../domain/projectFile";
 
 export const MILLIMETERS_PER_INCH = 25.4;
@@ -41,6 +42,9 @@ export interface PptxLabelPlan {
 export interface PptxSlidePlan {
   readonly pageId: string;
   readonly pageName: string;
+  readonly figureId: string;
+  readonly figureNumber: number;
+  readonly figurePageNumber: number;
   readonly images: readonly PptxImagePlan[];
   readonly labels: readonly PptxLabelPlan[];
 }
@@ -82,6 +86,15 @@ export function buildPptxExportPlan(
     ? editor.project.pages.filter((page) => page.id === options.activePageId)
     : editor.project.pages;
   if (pages.length === 0) throw new PptxExportError(["The selected page could not be found."]);
+
+  const pageFigurePositions = new Map<string, { figureId: string; figureNumber: number; figurePageNumber: number }>();
+  getProjectFigures(editor.project).forEach((figure, figureIndex) => {
+    figure.pages.forEach((page, figurePageIndex) => pageFigurePositions.set(page.id, {
+      figureId: figure.id,
+      figureNumber: figureIndex + 1,
+      figurePageNumber: figurePageIndex + 1,
+    }));
+  });
 
   const assetsById = new Map(editor.assets.map((asset) => [asset.id, asset]));
   const typesById = new Map(editor.types.map((type) => [type.id, type]));
@@ -130,7 +143,8 @@ export function buildPptxExportPlan(
         color: normalizeHexColor(editor.project.labelSettings.color),
       }];
     });
-    return { pageId: page.id, pageName: page.name, images, labels };
+    const figurePosition = pageFigurePositions.get(page.id)!;
+    return { pageId: page.id, pageName: page.name, ...figurePosition, images, labels };
   });
 
   if (errors.length > 0) throw new PptxExportError(errors, warnings);
@@ -156,7 +170,7 @@ export async function exportPptx(
   for (const slidePlan of plan.slides) {
     const slide = pptx.addSlide();
     slide.background = { color: "FFFFFF" };
-    slide.addNotes(`Figure Composer page ${slidePlan.pageName}. Panel and label objects remain independently editable.`);
+    slide.addNotes(`Figure ${slidePlan.figureNumber}, page ${slidePlan.figurePageNumber} (${slidePlan.pageName}). Panel and label objects remain independently editable.`);
 
     for (const imagePlan of slidePlan.images) {
       const asset = assetsById.get(imagePlan.assetId);

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { A4_PORTRAIT } from "../src/domain/page";
 import {
   getInitialPanelSizeMm,
+  getPowerPointReferenceSizeMm,
   movePanelGeometry,
   placePanelGeometry,
   removePanelById,
@@ -22,6 +23,10 @@ describe("panel creation", () => {
   it("fits landscape and portrait images into the neutral 64 mm box", () => {
     expect(getInitialPanelSizeMm(1200, 600)).toEqual({ widthMm: 64, heightMm: 32 });
     expect(getInitialPanelSizeMm(600, 1200)).toEqual({ widthMm: 32, heightMm: 64 });
+  });
+
+  it("uses PowerPoint's 96 DPI original-size reference for scale percentages", () => {
+    expect(getPowerPointReferenceSizeMm(384, 192)).toEqual({ widthMm: 101.6, heightMm: 50.8 });
   });
 
   it("creates deterministic grid-snapped placement around a drop point", () => {

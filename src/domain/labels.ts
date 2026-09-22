@@ -1,5 +1,5 @@
 import type { PageDefinition } from "./page";
-import type { Panel, PanelGeometry } from "./panel";
+import { roundMm, type Panel, type PanelGeometry } from "./panel";
 
 export type PanelLabelMode = "auto" | "manual";
 export type LabelOffsetMode = "automatic" | "manual";
@@ -26,8 +26,19 @@ export interface ProjectLabelSettings {
   readonly sequenceMode: LabelSequenceMode;
 }
 
+export interface PanelLayoutFootprint {
+  /** Extents relative to the panel image's top-left corner. */
+  readonly leftMm: number;
+  readonly topMm: number;
+  readonly rightMm: number;
+  readonly bottomMm: number;
+  readonly widthMm: number;
+  readonly heightMm: number;
+}
+
 export interface LabelPageLike {
   readonly id: string;
+  readonly figureId?: string;
   readonly definition: PageDefinition;
   readonly panels: readonly Panel[];
 }
@@ -92,16 +103,23 @@ export function getPanelReadingOrder(
   }
   const candidates = panels.filter((panel) => panel.label.visible);
   const byTop = [...candidates].sort(compareGeometryTopFirst);
-  const rows: Array<{ anchorY: number; panels: Panel[] }> = [];
+  const rows: Array<{ topY: number; centerY: number; labelY: number; panels: Panel[] }> = [];
 
   byTop.forEach((panel) => {
-    const row = rows.find((candidate) => Math.abs(panel.geometry.yMm - candidate.anchorY) <= rowToleranceMm);
+    const topY = panel.geometry.yMm;
+    const centerY = panel.geometry.yMm + panel.geometry.heightMm / 2;
+    const labelY = panel.geometry.yMm + panel.label.offsetYmm;
+    const row = rows.find((candidate) => (
+      Math.abs(topY - candidate.topY) <= rowToleranceMm
+      || Math.abs(centerY - candidate.centerY) <= rowToleranceMm
+      || Math.abs(labelY - candidate.labelY) <= rowToleranceMm
+    ));
     if (row) row.panels.push(panel);
-    else rows.push({ anchorY: panel.geometry.yMm, panels: [panel] });
+    else rows.push({ topY, centerY, labelY, panels: [panel] });
   });
 
   return rows
-    .sort((a, b) => a.anchorY - b.anchorY)
+    .sort((a, b) => a.topY - b.topY)
     .flatMap((row) => row.panels.sort(compareGeometryLeftFirst));
 }
 
@@ -135,13 +153,30 @@ export function autoLabelPanels(
   });
 }
 
+export function getPageLabelStartIndex(
+  pages: readonly LabelPageLike[],
+  pageId: string,
+  settings: Pick<ProjectLabelSettings, "rowToleranceMm" | "sequenceMode">,
+): number {
+  if (settings.sequenceMode === "restart-per-page") return 0;
+  const pageIndex = pages.findIndex((page) => page.id === pageId);
+  if (pageIndex < 0) throw new Error(`Unknown page: ${pageId}`);
+  const figureId = pages[pageIndex].figureId ?? "legacy-figure";
+  return pages.slice(0, pageIndex)
+    .filter((page) => (page.figureId ?? "legacy-figure") === figureId)
+    .reduce((count, page) => count + getPanelReadingOrder(page.panels, settings.rowToleranceMm).length, 0);
+}
+
 export function autoLabelOrderedPages<TPage extends LabelPageLike>(
   pages: readonly TPage[],
   settings: ProjectLabelSettings,
   manualPolicy: ManualLabelPolicy = "preserve",
 ): TPage[] {
   let startIndex = 0;
-  return pages.map((page) => {
+  let currentFigureId: string | undefined;
+  return pages.map((page, pageIndex) => {
+    const figureId = page.figureId ?? "legacy-figure";
+    if (pageIndex > 0 && figureId !== currentFigureId) startIndex = 0;
     const panels = autoLabelPanels(page.panels, {
       rowToleranceMm: settings.rowToleranceMm,
       startIndex: settings.sequenceMode === "continuous" ? startIndex : 0,
@@ -150,6 +185,7 @@ export function autoLabelOrderedPages<TPage extends LabelPageLike>(
     if (settings.sequenceMode === "continuous") {
       startIndex += getPanelReadingOrder(page.panels, settings.rowToleranceMm).length;
     }
+    currentFigureId = figureId;
     return { ...page, panels };
   });
 }
@@ -199,12 +235,64 @@ export function getPanelLabelBoundsMm(
   settings: ProjectLabelSettings,
 ): PanelGeometry {
   const heightMm = settings.fontSizePt * 25.4 / 72;
-  const widthMm = Math.max(heightMm * 0.55, panel.label.text.length * heightMm * 0.62);
+  // One em per character is a conservative cross-font bound (including wide Latin/CJK glyphs).
+  const widthMm = Math.max(heightMm * 0.6, panel.label.text.length * heightMm);
   return {
     xMm: panel.geometry.xMm + panel.label.offsetXmm,
     yMm: panel.geometry.yMm + panel.label.offsetYmm - heightMm,
     widthMm,
     heightMm,
+  };
+}
+
+export function getPanelLayoutFootprintMm(
+  panel: Panel,
+  settings: ProjectLabelSettings,
+  scaleFactor = 1,
+): PanelLayoutFootprint {
+  if (!Number.isFinite(scaleFactor) || scaleFactor <= 0) {
+    throw new Error("Panel layout scale must be a positive finite value.");
+  }
+  const imageWidthMm = roundMm(panel.geometry.widthMm * scaleFactor);
+  const imageHeightMm = roundMm(panel.geometry.heightMm * scaleFactor);
+  if (!panel.label.visible || !panel.label.text.trim()) {
+    return {
+      leftMm: 0,
+      topMm: 0,
+      rightMm: imageWidthMm,
+      bottomMm: imageHeightMm,
+      widthMm: imageWidthMm,
+      heightMm: imageHeightMm,
+    };
+  }
+  const labelBounds = getPanelLabelBoundsMm({
+    ...panel,
+    geometry: { xMm: 0, yMm: 0, widthMm: imageWidthMm, heightMm: imageHeightMm },
+  }, settings);
+  const leftMm = Math.min(0, labelBounds.xMm);
+  const topMm = Math.min(0, labelBounds.yMm);
+  const rightMm = Math.max(imageWidthMm, labelBounds.xMm + labelBounds.widthMm);
+  const bottomMm = Math.max(imageHeightMm, labelBounds.yMm + labelBounds.heightMm);
+  return {
+    leftMm: roundMm(leftMm),
+    topMm: roundMm(topMm),
+    rightMm: roundMm(rightMm),
+    bottomMm: roundMm(bottomMm),
+    widthMm: roundMm(rightMm - leftMm),
+    heightMm: roundMm(bottomMm - topMm),
+  };
+}
+
+export function getPanelVisualBoundsMm(
+  panel: Panel,
+  settings: ProjectLabelSettings,
+): PanelGeometry {
+  const footprint = getPanelLayoutFootprintMm(panel, settings);
+  return {
+    xMm: roundMm(panel.geometry.xMm + footprint.leftMm),
+    yMm: roundMm(panel.geometry.yMm + footprint.topMm),
+    widthMm: footprint.widthMm,
+    heightMm: footprint.heightMm,
   };
 }
 

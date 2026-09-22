@@ -1,6 +1,6 @@
 import type { EditorDocument } from "./editorDocument";
 import { getPanelLabelBoundsMm } from "./labels";
-import type { PageDefinition } from "./page";
+import { getPageMargins, type PageDefinition } from "./page";
 import type { Panel, PanelGeometry } from "./panel";
 import { roundMm } from "./panel";
 import { getProjectOwnershipErrors } from "./project";
@@ -83,8 +83,9 @@ export function reviewDocument(
 
       const safeIntrusion = safeMarginIntrusion(geometry, page.definition);
       if (safeIntrusion > GEOMETRY_EPSILON_MM) {
-        const fitsSafeArea = geometry.widthMm <= page.definition.widthMm - page.definition.marginMm * 2
-          && geometry.heightMm <= page.definition.heightMm - page.definition.marginMm * 2;
+        const margins = getPageMargins(page.definition);
+        const fitsSafeArea = geometry.widthMm <= page.definition.widthMm - margins.leftMm - margins.rightMm
+          && geometry.heightMm <= page.definition.heightMm - margins.topMm - margins.bottomMm;
         findings.push({
           ...finding("panel-outside-safe-margin", "warning", page.id, [panel.id], `${name} is outside the safe margin by ${formatNumber(safeIntrusion)} mm.`),
           fix: fitsSafeArea ? { kind: "move-inside-margin", label: "Move inside margin", panelId: panel.id, pageId: page.id } : undefined,
@@ -131,6 +132,11 @@ export function reviewDocument(
             findings.push(finding("low-dpi", "warning", page.id, [panel.id], `${name} has ${Math.round(dpi)} effective DPI (recommended 300 or higher).`));
           }
         }
+        if (asset.qualityClass === "bitmap-fallback") {
+          findings.push(finding("clipboard-bitmap-fallback", "warning", page.id, [panel.id], `${name} uses a clipboard bitmap fallback; a vector or original raster source may preserve more information.`));
+        } else if (asset.qualityClass === "lossy-raster") {
+          findings.push(finding("lossy-raster-source", "info", page.id, [panel.id], `${name} uses a lossy raster clipboard source.`));
+        }
         const check = checks.get(asset.id);
         if (check?.status === "changed") {
           findings.push({
@@ -161,6 +167,16 @@ export function reviewDocument(
       labelsByText.set(text, [...(labelsByText.get(text) ?? []), panel]);
       if (outsideBounds(bounds, page.definition)) {
         findings.push(finding("label-outside-page", "warning", page.id, [panel.id], `Label ${text} extends outside ${page.name}.`));
+      }
+      const labelSafeIntrusion = safeMarginIntrusion(bounds, page.definition);
+      if (labelSafeIntrusion > GEOMETRY_EPSILON_MM) {
+        findings.push(finding(
+          "label-outside-safe-margin",
+          "warning",
+          page.id,
+          [panel.id],
+          `Label ${text} is outside the safe margin by ${formatNumber(labelSafeIntrusion)} mm.`,
+        ));
       }
       page.panels.forEach((candidate) => {
         if (intersects(bounds, candidate.geometry)) {
@@ -215,15 +231,16 @@ export function effectiveDpi(panel: Panel, intrinsicWidthPx: number, intrinsicHe
 }
 
 export function movePanelInsideSafeMargin(panel: Panel, page: PageDefinition): Panel {
-  const maxX = page.widthMm - page.marginMm - panel.geometry.widthMm;
-  const maxY = page.heightMm - page.marginMm - panel.geometry.heightMm;
-  if (maxX < page.marginMm || maxY < page.marginMm) return panel;
+  const margins = getPageMargins(page);
+  const maxX = page.widthMm - margins.rightMm - panel.geometry.widthMm;
+  const maxY = page.heightMm - margins.bottomMm - panel.geometry.heightMm;
+  if (maxX < margins.leftMm || maxY < margins.topMm) return panel;
   return {
     ...panel,
     geometry: {
       ...panel.geometry,
-      xMm: roundMm(Math.min(Math.max(panel.geometry.xMm, page.marginMm), maxX)),
-      yMm: roundMm(Math.min(Math.max(panel.geometry.yMm, page.marginMm), maxY)),
+      xMm: roundMm(Math.min(Math.max(panel.geometry.xMm, margins.leftMm), maxX)),
+      yMm: roundMm(Math.min(Math.max(panel.geometry.yMm, margins.topMm), maxY)),
     },
   };
 }
@@ -244,12 +261,13 @@ function outsideBounds(bounds: PanelGeometry, page: PageDefinition): boolean {
 }
 
 function safeMarginIntrusion(bounds: PanelGeometry, page: PageDefinition): number {
+  const margins = getPageMargins(page);
   return Math.max(
     0,
-    page.marginMm - bounds.xMm,
-    page.marginMm - bounds.yMm,
-    bounds.xMm + bounds.widthMm - (page.widthMm - page.marginMm),
-    bounds.yMm + bounds.heightMm - (page.heightMm - page.marginMm),
+    margins.leftMm - bounds.xMm,
+    margins.topMm - bounds.yMm,
+    bounds.xMm + bounds.widthMm - (page.widthMm - margins.rightMm),
+    bounds.yMm + bounds.heightMm - (page.heightMm - margins.bottomMm),
   );
 }
 

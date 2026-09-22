@@ -1,8 +1,8 @@
 # Figure Composer Master Specification
 
-Spec version: 1.1.0  
-Implementation status: Milestones 1-12 implemented as v1.0.1 source; native certification pending
-Last updated: 2026-09-18
+Spec version: 1.3.0
+Implementation status: Milestones 1-12, web clipboard paste, Figure grouping, and portable project containers implemented as v1.3.0 source; native high-fidelity clipboard work and certification pending
+Last updated: 2026-09-20
 
 ## 1. Product goal
 
@@ -18,6 +18,7 @@ Figure Composer is a simple, local-first application that removes repetitive siz
 - A multi-page project is never modeled as one giant vertically extended canvas.
 - Millimeters are the canonical internal geometry unit. Pixels are a viewport-only conversion.
 - Original source files are never modified.
+- Imports preserve the highest-fidelity source representation already available; previews are disposable derivatives and never replace canonical source data.
 - Layout operations are deterministic and project data is human-readable where practical.
 - Panel labels are panel-owned editable text with project-level typography and page-local millimeter offsets; they are never baked into source images.
 - Automatic relabeling occurs only through an explicit command and preserves manual text by default.
@@ -35,6 +36,8 @@ The frontend owns project state, the active-page preview transform, deterministi
 
 The module specifications under `specs/modules/` own detailed behavior. Major decisions are recorded under `specs/decisions/`.
 
+Clipboard work follows the provider boundary in `13-clipboard-import.md`: browser mode exposes only browser-accessible formats and must not claim full fidelity, while the final Tauri provider enumerates native Office/Windows representations without constraining the design to the browser Clipboard API.
+
 ## 4. Cross-module contracts
 
 - Page, panel, label, and group geometry is stored in millimeters.
@@ -48,6 +51,7 @@ The module specifications under `specs/modules/` own detailed behavior. Major de
 - The exporter consumes ordered project pages rather than DOM or screen-pixel measurements; Page 1 maps to Slide 1, Page 2 to Slide 2, and so on, with every slide A4-sized.
 - Validation reports stable Error/Warning/Info findings. Structural or missing-source errors block export; warnings require an explicit Export Anyway choice.
 - Ordered page labeling supports continuous project sequences or per-page restart without deriving order from filenames, IDs, import order, or DOM order.
+- Clipboard assets keep canonical source and preview representations separate; quality metadata, persistence, Review, and PPTX export refer to the canonical source.
 
 ## 5. Versioning and change discipline
 
@@ -57,9 +61,13 @@ Behavior changes require an owning module spec update, tests, a changelog entry,
 
 MVP includes multi-page A4 project structure, A4 preview, PNG/JPEG/SVG/TIFF import, panel types and presets, manual placement and sizing, snapping and alignment, deterministic automatic layout/pagination, labels, undo/redo, replacement, save/load, autosave recovery, validation, and editable A4 PPTX export.
 
-AI classification, journal presets, collaboration, cloud sync, OCR, PDF editing, and submission automation are outside MVP.
+High-fidelity PowerPoint clipboard import, AI classification, journal presets, collaboration, cloud sync, OCR, PDF editing, and submission automation are outside the implemented MVP.
 
-## 7. Milestone 1 acceptance
+## 7. Roadmap: high-fidelity PowerPoint clipboard import
+
+The web portion of the workflow in `modules/13-clipboard-import.md` is implemented: Ctrl/Cmd+V creates one active-page Other panel from browser-exposed SVG/TIFF/PNG/JPEG, preserves reliable HTML physical size, uses deterministic 3 mm placement, participates in Undo/Redo, reports source quality/effective DPI, and stores the selected canonical clipboard file in portable `.figproj` saves. The remaining native roadmap adds full SVG/EMF/WMF/TIFF/PNG/DIB/JPEG enumeration, canonical-source PPTX export for native-only formats, and Windows-native verification.
+
+## 8. Milestone 1 acceptance
 
 - The application opens into a three-region shell.
 - A white A4 portrait page is visible on a neutral workspace.
@@ -69,6 +77,6 @@ AI classification, journal presets, collaboration, cloud sync, OCR, PDF editing,
 - Fit page and fit width calculate deterministic viewport zoom.
 - Automated tests verify page geometry and viewport conversion.
 
-## 8. Current limitations
+## 9. Current limitations
 
-Milestones 1-12 are implemented in the `1.0.1` (`v1.0.1`) source checkpoint, including desktop shutdown protection, session TEMP ownership, stale cleanup, persistent settings, synchronized version enforcement, and versioned Windows preview controls. Remaining work is release-environment certification: build and install Windows/macOS packages, verify the final no-server double-click launch and full process termination, exercise TEMP cleanup/forced-crash recovery/OS drag-drop in packaged binaries, and open a generated three-page deck in native PowerPoint. Advanced SVG/font fidelity still depends on the receiving PowerPoint installation; TIFF continues to export its safe first-page PNG preview.
+Milestones 1-12, browser/WebView clipboard paste, multi-page Figure grouping, and single-file portable project containers are implemented in the `1.3.0` source checkpoint. Portable `.figproj` saves contain `project.json` plus every exact source file, verify byte size and SHA-256 on Import Figure, and restore embedded files as editable session sources without relying on the original path or computer. The current editor still does not enumerate native EMF/WMF clipboard formats. Remaining work also includes release-environment certification: build and install Windows/macOS packages, verify the final no-server double-click launch and full process termination, exercise TEMP cleanup/forced-crash recovery/OS drag/drop in packaged binaries, and open a generated multi-Figure deck in native PowerPoint. Advanced SVG/font fidelity still depends on the receiving PowerPoint installation; TIFF currently exports its safe first-page PNG preview while its exact original TIFF bytes remain preserved in the portable project.
