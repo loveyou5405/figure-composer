@@ -203,7 +203,7 @@ export function generateAutoLayoutCandidates(
   for (const factor of SCALE_STEPS.slice(1)) {
     scaled.push(...generateCandidatesAtScale(panels, region, resolved, factor, labelSettings));
   }
-  return sortAndDedupeCandidates(scaled).slice(0, resolved.maxCandidates);
+  return sortAndDedupeCandidates(scaled, resolved.mode).slice(0, resolved.maxCandidates);
 }
 
 export function autoArrangeProject(
@@ -517,7 +517,7 @@ function generateCandidatesAtScale(
     settings,
     scaleFactor,
     sizes,
-  )));
+  )), settings.mode);
 }
 
 function prunePartitionStates(
@@ -776,14 +776,21 @@ function clampRegionToSafe(region: LayoutRegion, safe: LayoutRegion): LayoutRegi
   };
 }
 
-function sortAndDedupeCandidates(candidates: readonly AutoLayoutCandidate[]): AutoLayoutCandidate[] {
+function sortAndDedupeCandidates(
+  candidates: readonly AutoLayoutCandidate[],
+  mode: AutoLayoutMode,
+): AutoLayoutCandidate[] {
   const unique = new Map<string, AutoLayoutCandidate>();
   candidates.forEach((candidate) => {
     const key = `${candidate.scaleFactor}:${candidate.key}`;
     const current = unique.get(key);
     if (!current || candidate.score < current.score) unique.set(key, candidate);
   });
-  return [...unique.values()].sort((a, b) => a.score - b.score
+  return [...unique.values()].sort((a, b) => (
+    mode === "compact"
+      ? a.scoreBreakdown.avoidableRowBreaks - b.scoreBreakdown.avoidableRowBreaks
+      : 0
+  ) || a.score - b.score
     || b.scaleFactor - a.scaleFactor
     || a.key.localeCompare(b.key));
 }

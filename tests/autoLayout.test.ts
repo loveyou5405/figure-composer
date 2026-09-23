@@ -260,6 +260,23 @@ describe("deterministic row-packing candidates", () => {
     expect(candidate.scoreBreakdown.avoidableRowBreaks).toBe(0);
   });
 
+  it("ranks horizontal row filling ahead of every secondary Compact score", () => {
+    const panels = [
+      makePanel("a", 42, 18),
+      makePanel("b", 50, 34),
+      makePanel("c", 50, 22),
+      makePanel("d", 50, 40),
+    ];
+    const candidates = generateAutoLayoutCandidates(
+      panels,
+      { xMm: 12, yMm: 12, widthMm: 186, heightMm: 273 },
+      { mode: "compact", horizontalGapMm: 5.5, verticalGapMm: 5.5, maxCandidates: 20 },
+    );
+    const avoidableBreakCounts = candidates.map((item) => item.scoreBreakdown.avoidableRowBreaks);
+    expect(avoidableBreakCounts).toEqual([...avoidableBreakCounts].sort((a, b) => a - b));
+    expect(candidates[0].rows.map((row) => row.panelIds)).toEqual([["a", "b", "c"], ["d"]]);
+  });
+
   it("returns the same top-N candidates for identical inputs", () => {
     const panels = [
       makePanel("a", 52, 22),

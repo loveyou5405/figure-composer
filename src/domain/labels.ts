@@ -4,6 +4,7 @@ import { roundMm, type Panel, type PanelGeometry } from "./panel";
 export type PanelLabelMode = "auto" | "manual";
 export type LabelOffsetMode = "automatic" | "manual";
 export type LabelSequenceMode = "continuous" | "restart-per-page";
+export type LabelLetterCase = "uppercase" | "lowercase";
 export type ManualLabelPolicy = "preserve" | "replace";
 
 export interface PanelLabel {
@@ -24,6 +25,7 @@ export interface ProjectLabelSettings {
   readonly defaultOffsetYmm: number;
   readonly rowToleranceMm: number;
   readonly sequenceMode: LabelSequenceMode;
+  readonly letterCase: LabelLetterCase;
 }
 
 export interface PanelLayoutFootprint {
@@ -65,6 +67,7 @@ export const DEFAULT_LABEL_SETTINGS: ProjectLabelSettings = {
   defaultOffsetYmm: -2,
   rowToleranceMm: 5,
   sequenceMode: "continuous",
+  letterCase: "uppercase",
 };
 
 export function createDefaultPanelLabel(
@@ -80,7 +83,10 @@ export function createDefaultPanelLabel(
   };
 }
 
-export function alphabeticLabel(index: number): string {
+export function alphabeticLabel(
+  index: number,
+  letterCase: LabelLetterCase = "uppercase",
+): string {
   if (!Number.isInteger(index) || index < 0) {
     throw new Error("Label index must be a non-negative integer.");
   }
@@ -91,7 +97,7 @@ export function alphabeticLabel(index: number): string {
     result = String.fromCharCode(65 + (value % 26)) + result;
     value = Math.floor(value / 26);
   }
-  return result;
+  return letterCase === "lowercase" ? result.toLowerCase() : result;
 }
 
 export function getPanelReadingOrder(
@@ -130,6 +136,7 @@ export function autoLabelPanels(
     readonly startIndex?: number;
     readonly panelIds?: ReadonlySet<string>;
     readonly manualPolicy?: ManualLabelPolicy;
+    readonly letterCase?: LabelLetterCase;
   } = {},
 ): Panel[] {
   const {
@@ -137,13 +144,17 @@ export function autoLabelPanels(
     startIndex = 0,
     panelIds,
     manualPolicy = "preserve",
+    letterCase = "uppercase",
   } = options;
   if (!Number.isInteger(startIndex) || startIndex < 0) {
     throw new Error("Start index must be a non-negative integer.");
   }
   const eligible = panels.filter((panel) => !panelIds || panelIds.has(panel.id));
   const order = getPanelReadingOrder(eligible, rowToleranceMm);
-  const assignments = new Map(order.map((panel, index) => [panel.id, alphabeticLabel(startIndex + index)]));
+  const assignments = new Map(order.map((panel, index) => [
+    panel.id,
+    alphabeticLabel(startIndex + index, letterCase),
+  ]));
 
   return panels.map((panel) => {
     const text = assignments.get(panel.id);
@@ -181,6 +192,7 @@ export function autoLabelOrderedPages<TPage extends LabelPageLike>(
       rowToleranceMm: settings.rowToleranceMm,
       startIndex: settings.sequenceMode === "continuous" ? startIndex : 0,
       manualPolicy,
+      letterCase: settings.letterCase,
     });
     if (settings.sequenceMode === "continuous") {
       startIndex += getPanelReadingOrder(page.panels, settings.rowToleranceMm).length;
@@ -188,6 +200,23 @@ export function autoLabelOrderedPages<TPage extends LabelPageLike>(
     currentFigureId = figureId;
     return { ...page, panels };
   });
+}
+
+export function applyLabelLetterCaseToAutomaticLabels(
+  panels: readonly Panel[],
+  letterCase: LabelLetterCase,
+): Panel[] {
+  return panels.map((panel) => panel.label.mode === "auto" && panel.label.text
+    ? {
+        ...panel,
+        label: {
+          ...panel.label,
+          text: letterCase === "lowercase"
+            ? panel.label.text.toLowerCase()
+            : panel.label.text.toUpperCase(),
+        },
+      }
+    : panel);
 }
 
 export function updatePanelLabelText(panel: Panel, text: string): Panel {

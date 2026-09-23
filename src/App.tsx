@@ -29,6 +29,7 @@ import {
 import { createStableId } from "./domain/id";
 import {
   applyDefaultOffsetsToAutomaticLabels,
+  applyLabelLetterCaseToAutomaticLabels,
   autoLabelPanels,
   createDefaultPanelLabel,
   getPageLabelStartIndex,
@@ -37,6 +38,7 @@ import {
   updatePanelLabelText,
   updatePanelLabelVisibility,
   type LabelSequenceMode,
+  type LabelLetterCase,
   type ManualLabelPolicy,
   type ProjectLabelSettings,
 } from "./domain/labels";
@@ -247,6 +249,12 @@ interface PendingSourceChange {
   readonly sizingMode: SourceSizingMode;
 }
 
+interface PendingPresetImport {
+  readonly asset: ImportedAsset;
+  readonly file: File;
+  readonly panel: Panel;
+}
+
 export function App() {
   const [initialAppSettings] = useState(() => loadAppSettings(localStorage));
   const [zoom, setZoom] = useState(initialAppSettings.preferences.zoomPercent);
@@ -254,6 +262,7 @@ export function App() {
   const [activeTab, setActiveTab] = useState<SidebarTab>("Assets");
   const [showGrid, setShowGrid] = useState(initialAppSettings.preferences.showGrid);
   const [showMargins, setShowMargins] = useState(initialAppSettings.preferences.showMargins);
+  const [showImportPresetPicker, setShowImportPresetPicker] = useState(true);
   const [isDragOver, setIsDragOver] = useState(false);
   const [history, setHistory] = useState(() => createHistory(createEditorDocumentFromSettings(initialAppSettings)));
   const document = history.present;
@@ -270,6 +279,7 @@ export function App() {
   const [importErrors, setImportErrors] = useState<string[]>([]);
   const [presetDraft, setPresetDraft] = useState<PresetDraft | null>(null);
   const [pendingPresetEdit, setPendingPresetEdit] = useState<PendingPresetEdit | null>(null);
+  const [pendingPresetImport, setPendingPresetImport] = useState<PendingPresetImport | null>(null);
   const [presetError, setPresetError] = useState<string | null>(null);
   const [pendingRelabel, setPendingRelabel] = useState<PendingRelabel | null>(null);
   const [saveStatus, setSaveStatus] = useState("Saved");
@@ -678,6 +688,29 @@ export function App() {
     objectUrlsRef.current.clear();
   }, []);
 
+  const finalizeImportedAssets = useCallback((
+    nextAssets: readonly ImportedAsset[],
+    nextPanels: readonly Panel[],
+    sourceFiles: readonly { assetId: string; file: File }[],
+    label: string,
+  ) => {
+    if (nextAssets.length === 0) return;
+    commitDocument(label, (current) => ({
+      ...current,
+      assets: [...current.assets, ...nextAssets],
+      project: updateProjectPagePanels(
+        current.project,
+        activePageId,
+        (currentPanels) => [...currentPanels, ...nextPanels],
+      ),
+    }));
+    nextAssets.forEach((asset) => objectUrlsRef.current.add(asset.previewUrl));
+    sourceFiles.forEach(({ assetId, file }) => sourceBindingsRef.current.set(assetId, createSnapshotSourceBinding(file)));
+    const lastPanelId = nextPanels.at(-1)?.id;
+    setSelection(lastPanelId ? selectOnlyPanel(lastPanelId) : clearPanelSelection());
+    setSourceCheckResults((current) => current.filter((result) => !nextAssets.some((asset) => asset.id === result.assetId)));
+  }, [activePageId, commitDocument]);
+
   const importFiles = useCallback(async (
     fileList: FileList | File[],
     dropPoint?: PointMm,
@@ -693,6 +726,7 @@ export function App() {
     const results = await loadImportedAssetBatch(files);
     const nextAssets: ImportedAsset[] = [];
     const nextPanels: Panel[] = [];
+    const nextSources: Array<{ assetId: string; file: File }> = [];
     const nextErrors: string[] = [];
 
     results.forEach((result, index) => {
@@ -722,26 +756,18 @@ export function App() {
         manualScaleOverride: false,
         label: createDefaultPanelLabel(project.labelSettings),
       });
-      objectUrlsRef.current.add(asset.previewUrl);
-      sourceBindingsRef.current.set(asset.id, createSnapshotSourceBinding(result.file));
+      nextSources.push({ assetId: asset.id, file: result.file });
     });
 
     if (nextAssets.length > 0) {
-      commitDocument("Import files", (current) => ({
-        ...current,
-        assets: [...current.assets, ...nextAssets],
-        project: updateProjectPagePanels(
-          current.project,
-          activePageId,
-          (currentPanels) => [...currentPanels, ...nextPanels],
-        ),
-      }));
-      const lastPanelId = nextPanels.at(-1)?.id;
-      setSelection(lastPanelId ? selectOnlyPanel(lastPanelId) : clearPanelSelection());
-      setSourceCheckResults((current) => current.filter((result) => !nextAssets.some((asset) => asset.id === result.assetId)));
+      if (showImportPresetPicker && files.length === 1 && nextAssets.length === 1) {
+        setPendingPresetImport({ asset: nextAssets[0], file: nextSources[0].file, panel: nextPanels[0] });
+      } else {
+        finalizeImportedAssets(nextAssets, nextPanels, nextSources, "Import files");
+      }
     }
     setImportErrors(nextErrors);
-  }, [activePageId, commitDocument, pageDefinition, presets, project.labelSettings, types]);
+  }, [finalizeImportedAssets, pageDefinition, presets, project.labelSettings, showImportPresetPicker, types]);
 
   const importClipboard = useCallback(async (clipboardData: DataTransfer) => {
     setActiveTab("Assets");
@@ -782,24 +808,35 @@ export function App() {
           || Math.abs(geometry.heightMm - baseSizeMm.heightMm) > 0.02,
         label: createDefaultPanelLabel(project.labelSettings),
       };
-
-      commitDocument("Paste clipboard panel", (current) => ({
-        ...current,
-        assets: [...current.assets, asset],
-        project: updateProjectPagePanels(
-          current.project,
-          activePageId,
-          (currentPanels) => [...currentPanels, panel],
-        ),
-      }));
       clipboardPlacementIndexRef.current.set(activePageId, cascadeIndex + 1);
-      objectUrlsRef.current.add(asset.previewUrl);
-      sourceBindingsRef.current.set(asset.id, createSnapshotSourceBinding(payload.file));
-      setSelection(selectOnlyPanel(panel.id));
+
+      if (showImportPresetPicker) {
+        setPendingPresetImport({ asset, file: payload.file, panel });
+      } else {
+        finalizeImportedAssets([asset], [panel], [{ assetId: asset.id, file: payload.file }], "Paste clipboard panel");
+      }
     } catch (error) {
       setImportErrors([error instanceof Error ? `Clipboard paste failed: ${error.message}` : "Clipboard paste failed."]);
     }
-  }, [activePageId, commitDocument, pageDefinition, presets, project.labelSettings, types]);
+  }, [activePageId, finalizeImportedAssets, pageDefinition, presets, project.labelSettings, showImportPresetPicker, types]);
+
+  const cancelPendingPresetImport = useCallback(() => {
+    if (pendingPresetImport?.asset.previewUrl) URL.revokeObjectURL(pendingPresetImport.asset.previewUrl);
+    setPendingPresetImport(null);
+  }, [pendingPresetImport]);
+
+  const confirmPendingPresetImport = useCallback((typeId: string) => {
+    if (!pendingPresetImport) return;
+    const { type, preset } = getPresetForType(types, presets, typeId);
+    const panel = applyPresetToPanel(pendingPresetImport.panel, type.id, preset, pageDefinition);
+    finalizeImportedAssets(
+      [pendingPresetImport.asset],
+      [panel],
+      [{ assetId: pendingPresetImport.asset.id, file: pendingPresetImport.file }],
+      "Import files",
+    );
+    setPendingPresetImport(null);
+  }, [finalizeImportedAssets, pageDefinition, pendingPresetImport, presets, types]);
 
   useEffect(() => {
     const handlePaste = (event: ClipboardEvent) => {
@@ -1130,6 +1167,7 @@ export function App() {
           startIndex,
           panelIds: target === "selection" ? selectedPanelIds : undefined,
           manualPolicy: policy,
+          letterCase: current.project.labelSettings.letterCase,
         })),
       };
     });
@@ -1157,13 +1195,21 @@ export function App() {
   }, [selectedPanel, updateActivePagePanels]);
 
   const updateLabelSettings = useCallback((update: Partial<ProjectLabelSettings>) => {
-    commitDocument("Edit label settings", (current) => ({
-      ...current,
-      project: {
+    commitDocument("Edit label settings", (current) => {
+      const project = {
         ...current.project,
         labelSettings: { ...current.project.labelSettings, ...update },
-      },
-    }));
+      };
+      return {
+        ...current,
+        project: update.letterCase && update.letterCase !== current.project.labelSettings.letterCase
+          ? mapProjectPanels(
+              project,
+              (pagePanels) => applyLabelLetterCaseToAutomaticLabels(pagePanels, update.letterCase!),
+            )
+          : project,
+      };
+    });
   }, [commitDocument]);
 
   const renameProject = useCallback((title: string) => {
@@ -1805,6 +1851,8 @@ export function App() {
                 fileInputRef={fileInputRef}
                 onFileInput={handleFileInput}
                 onImport={() => void requestImportFiles()}
+                importPresetPickerEnabled={showImportPresetPicker}
+                onImportPresetPickerEnabledChange={setShowImportPresetPicker}
                 onLoadDemo={loadDemoProject}
                 onCheckSources={() => void checkAllSources()}
                 onRefreshChanged={() => void refreshChangedSources()}
@@ -2299,6 +2347,16 @@ export function App() {
         </div>
       )}
 
+      {pendingPresetImport && (
+        <ImportPresetDialog
+          asset={pendingPresetImport.asset}
+          types={types}
+          inferredTypeId={pendingPresetImport.panel.typeId}
+          onSelect={confirmPendingPresetImport}
+          onCancel={cancelPendingPresetImport}
+        />
+      )}
+
       {pendingAppClose && (
         <div className="dialog-backdrop" role="presentation">
           <div className="relabel-dialog" role="dialog" aria-modal="true" aria-labelledby="unsaved-close-title">
@@ -2615,10 +2673,49 @@ interface AssetsSidebarProps {
   readonly fileInputRef: React.RefObject<HTMLInputElement>;
   readonly onFileInput: (event: ChangeEvent<HTMLInputElement>) => void;
   readonly onImport: () => void;
+  readonly importPresetPickerEnabled: boolean;
+  readonly onImportPresetPickerEnabledChange: (enabled: boolean) => void;
   readonly onLoadDemo: () => void;
   readonly onCheckSources: () => void;
   readonly onRefreshChanged: () => void;
   readonly onSelect: (panelId: string, additive: boolean) => void;
+}
+
+function ImportPresetDialog({
+  asset,
+  types,
+  inferredTypeId,
+  onSelect,
+  onCancel,
+}: {
+  readonly asset: ImportedAsset;
+  readonly types: readonly PanelTypeDefinition[];
+  readonly inferredTypeId: string;
+  readonly onSelect: (typeId: string) => void;
+  readonly onCancel: () => void;
+}) {
+  return (
+    <div className="import-preset-backdrop" role="presentation">
+      <section className="import-preset-dialog" role="dialog" aria-modal="true" aria-labelledby="import-preset-title">
+        <button className="import-preset-close" aria-label="Close preset picker" onClick={onCancel}>×</button>
+        <h2 id="import-preset-title">Choose image preset</h2>
+        <p>{asset.sourceName}</p>
+        <div className="import-preset-options">
+          {types.map((type) => (
+            <button
+              key={type.id}
+              className={type.id === inferredTypeId ? "recommended" : ""}
+              onClick={() => onSelect(type.id)}
+            >
+              <strong>{type.name}</strong>
+              {type.id === inferredTypeId && <small>Suggested</small>}
+            </button>
+          ))}
+        </div>
+        <button className="plain import-preset-cancel" onClick={onCancel}>Cancel import</button>
+      </section>
+    </div>
+  );
 }
 
 function AssetsSidebar({
@@ -2633,6 +2730,8 @@ function AssetsSidebar({
   fileInputRef,
   onFileInput,
   onImport,
+  importPresetPickerEnabled,
+  onImportPresetPickerEnabledChange,
   onLoadDemo,
   onCheckSources,
   onRefreshChanged,
@@ -2650,6 +2749,10 @@ function AssetsSidebar({
       />
       <button className="import-button" onClick={onImport}>＋ Import files</button>
       <p className="format-hint">PNG, JPEG, SVG, or TIFF · Ctrl/Cmd+V pastes one clipboard panel</p>
+      <label className="import-preset-toggle">
+        <span><strong>Choose preset for single image</strong><small>Show a preset picker after one image import or paste</small></span>
+        <input type="checkbox" checked={importPresetPickerEnabled} onChange={(event) => onImportPresetPickerEnabledChange(event.target.checked)} />
+      </label>
       <div className="source-check-actions">
         <button disabled={isCheckingSources || assetsById.size === 0} onClick={onCheckSources}>
           {isCheckingSources ? "Checking…" : "Check Sources"}
@@ -3117,6 +3220,7 @@ function PageInspector({
             </span>
           </label>
           <label className="settings-wide">Sequence<select value={labelSettings.sequenceMode} onChange={(event) => onLabelSettingsChange({ sequenceMode: event.target.value as LabelSequenceMode })}><option value="continuous">Continue within Figure</option><option value="restart-per-page">Restart each page</option></select></label>
+          <label className="settings-wide">Letter case<select aria-label="Label letter case" value={labelSettings.letterCase} onChange={(event) => onLabelSettingsChange({ letterCase: event.target.value as LabelLetterCase })}><option value="uppercase">Uppercase (A, B, C)</option><option value="lowercase">Lowercase (a, b, c)</option></select></label>
         </div>
         {offsetChanged && (
           <div className="preset-decision label-offset-decision" role="alert">

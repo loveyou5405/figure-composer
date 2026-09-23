@@ -81,6 +81,13 @@ describe("versioned .figproj persistence", () => {
     expect([...figureIds][0]).toBeTruthy();
   });
 
+  it("defaults legacy projects without a label letter-case setting to uppercase", () => {
+    const parsed = JSON.parse(serializeProjectFile(documentWithPanel()));
+    delete parsed.project.labelSettings.letterCase;
+    const loaded = deserializeProjectFile(JSON.stringify(parsed));
+    expect(loaded.project.labelSettings.letterCase).toBe("uppercase");
+  });
+
   it("rejects a present but invalid Figure ID instead of treating it as legacy", () => {
     const parsed = JSON.parse(serializeProjectFile(documentWithPanel()));
     parsed.project.pages[0].figureId = 123;

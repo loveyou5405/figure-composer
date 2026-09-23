@@ -4,6 +4,15 @@ All notable changes to Figure Composer are documented here. Versions follow Sema
 
 ## [Unreleased]
 
+### Added
+
+- Added a persistent uppercase/lowercase option for automatic panel labels; changing it updates automatic labels without altering manual label text.
+- Added a compact single-image import/paste preset picker with an Asset-sidebar toggle, enabled by default; multi-file imports remain uninterrupted.
+
+### Changed
+
+- Compact Auto Layout now treats avoidable row breaks as a primary ordering rule and fills each row horizontally before considering secondary layout scores.
+
 ## [1.3.1] - 2026-09-22
 
 ### Added

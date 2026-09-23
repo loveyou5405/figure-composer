@@ -1,7 +1,7 @@
 # Panel Labels
 
 Module: Panel Labels  
-Spec version: 0.3.0
+Spec version: 0.4.0
 Implementation status: Milestone 5 implemented  
 Last updated: 2026-09-22
 Depends on: Project Model, Layout Engine, Canvas Preview
@@ -12,17 +12,17 @@ Own deterministic alphabetic sequences, geometry-based reading order, explicit r
 
 ## 2. User-facing behavior
 
-`Auto Label Page` assigns letters from top to bottom and left to right, continuing from preceding pages in the same Figure. `Auto Label Selection` starts at A for only the selected subset. `New Figure` establishes a new sequence boundary, so its first automatic page label starts at A. Labels remain attached during every panel layout operation and never change merely because the panel moves or resizes. Editing text marks it manual. Hidden labels retain their text but do not render or participate in automatic major-panel sequencing.
+`Auto Label Page` assigns letters from top to bottom and left to right, continuing from preceding pages in the same Figure. `Auto Label Selection` starts at A or a for only the selected subset. Label settings can switch automatic sequences between uppercase and lowercase; existing automatic labels update immediately while manual labels are preserved. `New Figure` establishes a new sequence boundary, so its first automatic page label starts at A or a. Labels remain attached during every panel layout operation and never change merely because the panel moves or resizes. Editing text marks it manual. Hidden labels retain their text but do not render or participate in automatic major-panel sequencing.
 
 ## 3. Data model
 
-Every panel owns a `PanelLabel` with `text`, `mode` (`auto` or `manual`), `visible`, `offsetXmm`, `offsetYmm`, and `offsetMode` (`automatic` or `manual`). Labels are metadata, not canvas objects. `ProjectLabelSettings` owns font family, point size, bold state, color, default offsets, row tolerance, and `continuous` or `restart-per-page` sequencing. The font selector offers Arial and Times New Roman. Defaults are Arial Bold 10 pt black, offsets -2 mm X / -2 mm Y, 5 mm row tolerance, and continuous project sequencing.
+Every panel owns a `PanelLabel` with `text`, `mode` (`auto` or `manual`), `visible`, `offsetXmm`, `offsetYmm`, and `offsetMode` (`automatic` or `manual`). Labels are metadata, not canvas objects. `ProjectLabelSettings` owns font family, point size, bold state, color, default offsets, row tolerance, `uppercase` or `lowercase` letter case, and `continuous` or `restart-per-page` sequencing. The font selector offers Arial and Times New Roman. Defaults are Arial Bold 10 pt black, offsets -2 mm X / -2 mm Y, 5 mm row tolerance, uppercase, and continuous project sequencing.
 
 The panel's top-left corner is the reference anchor. The label's lower-left anchor is `panel.xMm + offsetXmm`, `panel.yMm + offsetYmm`; text extends upward from that point. Negative defaults therefore place the complete label above and slightly left of the image content. Preview and future export derive position from this page-local geometry. Labels remain text and are never baked into source images.
 
 ## 4. Public interfaces
 
-- `alphabeticLabel(index)` generates A…Z, AA, AB, and beyond.
+- `alphabeticLabel(index, letterCase)` generates A…Z / a…z, AA / aa, and beyond.
 - `getPanelReadingOrder(panels, toleranceMm)` excludes hidden labels, groups panels whose top, image center, or label anchor shares a row within an inclusive tolerance, orders rows by top Y, then orders each row by X.
 - `autoLabelPanels` labels a page or explicit panel-ID subset and accepts preserve/replace manual policy.
 - `getPageLabelStartIndex` derives the first automatic slot from preceding pages in the same Figure.
@@ -74,6 +74,7 @@ Order preview, direct label dragging, collision solving, per-label typography ov
 - 0.2.0: Implemented panel-attached labels, deterministic ordering/sequences, manual preservation, visibility, project styles, multi-page policies, and validation hooks.
 - 0.2.1: Changed the default offset to -2 mm / -2 mm, defined outside-panel lower-left anchoring, and added explicit existing/future automatic-offset application choices.
 - 0.2.2: Replaced free-text font entry with Arial and Times New Roman project-level choices.
+- 0.4.0: Added persistent uppercase/lowercase automatic-label selection while preserving manual text.
 - 0.2.3: Clarified default versus per-panel offsets, signed X/Y directions, millimeter units, and the explicit application state in the inspector.
 - 0.2.4: Made reading-order row detection robust to top-, image-center-, and label-anchor-aligned panels after label visibility changes.
 - 0.3.0: Scoped continuous automatic sequences to each Figure and restarted new Figures at A.

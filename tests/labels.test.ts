@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_LABEL_SETTINGS,
   applyDefaultOffsetsToAutomaticLabels,
+  applyLabelLetterCaseToAutomaticLabels,
   alphabeticLabel,
   autoLabelOrderedPages,
   autoLabelPanels,
@@ -56,6 +57,8 @@ describe("alphabetic panel label sequence", () => {
     expect(alphabeticLabel(26)).toBe("AA");
     expect(alphabeticLabel(27)).toBe("AB");
     expect(alphabeticLabel(28)).toBe("AC");
+    expect(alphabeticLabel(0, "lowercase")).toBe("a");
+    expect(alphabeticLabel(26, "lowercase")).toBe("aa");
   });
 
   it("rejects non-integer and negative indices", () => {
@@ -130,6 +133,15 @@ describe("explicit auto labeling", () => {
     const result = autoLabelPanels([manual], { manualPolicy: "replace" });
     expect(result[0].label).toMatchObject({ text: "A", mode: "auto" });
   });
+
+  it("generates lowercase automatic labels and preserves manual text when case changes", () => {
+    const automatic = autoLabelPanels([panel("a", 10, 10), panel("b", 40, 10)], { letterCase: "lowercase" });
+    const withManual = [automatic[0], updatePanelLabelText(automatic[1], "B1")];
+    const upper = applyLabelLetterCaseToAutomaticLabels(withManual, "uppercase");
+    expect(labels(automatic)).toEqual(["a", "b"]);
+    expect(labels(upper)).toEqual(["A", "B1"]);
+    expect(upper[1].label.mode).toBe("manual");
+  });
 });
 
 describe("multi-page sequence modes", () => {
@@ -148,6 +160,12 @@ describe("multi-page sequence modes", () => {
     const result = autoLabelOrderedPages(pages, { ...DEFAULT_LABEL_SETTINGS, sequenceMode: "restart-per-page" });
     expect(labels(result[0].panels)).toEqual(["A", "B"]);
     expect(labels(result[1].panels)).toEqual(["A", "B"]);
+  });
+
+  it("uses the selected letter case across ordered pages", () => {
+    const result = autoLabelOrderedPages(pages, { ...DEFAULT_LABEL_SETTINGS, letterCase: "lowercase" });
+    expect(labels(result[0].panels)).toEqual(["a", "b"]);
+    expect(labels(result[1].panels)).toEqual(["c", "d"]);
   });
 
   it("continues across pages in one figure and restarts at a new figure", () => {

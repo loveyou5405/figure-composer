@@ -12,7 +12,7 @@ Import, replace, refresh, check, and relink supported local visual assets withou
 
 ## 2. User-facing behavior
 
-Users can choose or drop multiple PNG, JPG/JPEG, SVG, TIF, and TIFF files onto the active A4 page. A selected panel exposes Replace Source and Refresh Source; a missing panel exposes Relink Source. Replace is panel-specific, Refresh updates all references to the same logical asset, and Relink preserves exact layout. Check Sources reports changed, missing, unchanged, and unavailable counts according to platform capability. No detected change is ever applied without an explicit Refresh action.
+Users can choose or drop multiple PNG, JPG/JPEG, SVG, TIF, and TIFF files onto the active A4 page. A single imported or pasted image opens a compact centered preset picker by default; the Asset-sidebar toggle can disable it, while multi-file imports never open it. A selected panel exposes Replace Source and Refresh Source; a missing panel exposes Relink Source. Replace is panel-specific, Refresh updates all references to the same logical asset, and Relink preserves exact layout. Check Sources reports changed, missing, unchanged, and unavailable counts according to platform capability. No detected change is ever applied without an explicit Refresh action.
 
 ## 3. Data model
 
@@ -75,3 +75,4 @@ The implemented `WebClipboardProvider` in `13-clipboard-import.md` reuses asset 
 - 0.8.0: Added the planned high-fidelity clipboard provider contract and canonical-versus-preview asset rules without claiming implementation.
 - 0.9.0: Implemented browser/WebView Ctrl/Cmd+V for exposed SVG/TIFF/PNG/JPEG payloads with quality metadata and active-page ownership.
 - 1.0.0: Embedded exact source bytes in portable `.figproj` and rebuilt previews/source bindings from verified package entries on Import Figure.
+- 1.1.0: Added the optional single-image preset picker while preserving uninterrupted batch import.

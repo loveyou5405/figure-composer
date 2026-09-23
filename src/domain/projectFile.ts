@@ -1,6 +1,6 @@
 import type { ImportedAsset, SupportedAssetKind } from "./asset";
 import type { EditorDocument, AutoLayoutPreferences } from "./editorDocument";
-import type { ProjectLabelSettings } from "./labels";
+import { DEFAULT_LABEL_SETTINGS, type ProjectLabelSettings } from "./labels";
 import { A4_PORTRAIT } from "./page";
 import { getPageMargins, validatePageMargins } from "./page";
 import { getPowerPointReferenceSizeMm } from "./panel";
@@ -86,6 +86,7 @@ export function deserializeProjectFile(
   const document: EditorDocument = {
     project: {
       ...normalizedProject,
+      labelSettings: { ...DEFAULT_LABEL_SETTINGS, ...normalizedProject.labelSettings },
       pages: normalizedProject.pages.map((page) => ({
         ...page,
         panels: page.panels.map((panel) => ({
@@ -237,7 +238,8 @@ function validateLabelSettings(settings: ProjectLabelSettings, errors: string[])
     || ![settings.fontSizePt, settings.defaultOffsetXmm, settings.defaultOffsetYmm, settings.rowToleranceMm].every(Number.isFinite)
     || settings.fontSizePt <= 0 || settings.rowToleranceMm < 0
     || typeof settings.bold !== "boolean" || typeof settings.color !== "string"
-    || !["continuous", "restart-per-page"].includes(settings.sequenceMode)) errors.push("Project label settings are invalid.");
+    || !["continuous", "restart-per-page"].includes(settings.sequenceMode)
+    || !["uppercase", "lowercase"].includes(settings.letterCase)) errors.push("Project label settings are invalid.");
 }
 
 function assetFingerprint(asset: Pick<SerializedAssetReference, "id" | "sourceName" | "byteSize" | "lastModified">): string {

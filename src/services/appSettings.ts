@@ -1,6 +1,6 @@
 import type { AutoLayoutPreferences, EditorDocument } from "../domain/editorDocument";
 import { createInitialEditorDocument } from "../domain/editorDocument";
-import type { ProjectLabelSettings } from "../domain/labels";
+import { DEFAULT_LABEL_SETTINGS, type ProjectLabelSettings } from "../domain/labels";
 import type { PanelPreset, PanelTypeDefinition } from "../domain/preset";
 
 export const APP_SETTINGS_STORAGE_KEY = "figure-composer:settings:v1";
@@ -51,7 +51,7 @@ export function loadAppSettings(storage: Pick<Storage, "getItem">): AppSettings 
       ...parsed,
       preferences: { ...fallback.preferences, ...parsed.preferences },
       manuscriptStyleProfiles: Array.isArray(parsed.manuscriptStyleProfiles)
-        ? parsed.manuscriptStyleProfiles
+        ? parsed.manuscriptStyleProfiles.map((profile) => ({ ...DEFAULT_LABEL_SETTINGS, ...profile }))
         : fallback.manuscriptStyleProfiles,
       recentSettings: {
         layout: { ...fallback.recentSettings.layout, ...parsed.recentSettings.layout },
