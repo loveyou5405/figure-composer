@@ -2,6 +2,10 @@
 
 Every released version must update `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, `CHANGELOG.md`, this file, its immutable file under `specs/releases/`, and the versioned launcher/closer. The production build fails when these version records disagree.
 
+## v1.4.0 — 1.4.0 — 2026-09-24
+
+- Added single-image preset selection, lowercase labels, and compact horizontal-first layout behavior.
+
 ## v1.3.1 — 1.3.1 — 2026-09-22
 
 - Added editable Figure naming in the top bar.

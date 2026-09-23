@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.4.0] - 2026-09-24
+
+- Added single-image preset selection, lowercase labels, and compact horizontal-first layout behavior.
+
 All notable changes to Figure Composer are documented here. Versions follow Semantic Versioning.
 
 ## [Unreleased]

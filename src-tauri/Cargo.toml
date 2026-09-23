@@ -1,6 +1,6 @@
 [package]
 name = "figure-composer"
-version = "1.3.1"
+version = "1.4.0"
 description = "A local-first scientific figure composer"
 authors = ["Figure Composer"]
 edition = "2021"

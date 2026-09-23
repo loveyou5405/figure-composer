@@ -1,12 +1,12 @@
 # Figure Composer Version
 
 - Product target: `1.0.0`
-- Current checkpoint: `1.3.1`
+- Current checkpoint: `1.4.0`
 - Project schema: `0.1.0`
 - Specification system: `1.3.0`
 - Last updated: 2026-09-22
 
-`1.3.1` is displayed as `v1.3.1` in the web application, desktop window, and generated Windows preview controls. npm, Cargo, Tauri, launcher/closer filenames and contents, changelog, and immutable release record carry the same release identity; the build fails if they disagree. The project schema remains `0.1.0`; the portable container version is `1.0.0`.
+`1.4.0` is displayed as `v1.4.0` in the web application, desktop window, and generated Windows preview controls. npm, Cargo, Tauri, launcher/closer filenames and contents, changelog, and immutable release record carry the same release identity; the build fails if they disagree. The project schema remains `0.1.0`; the portable container version is `1.0.0`.
 
 ## Project compatibility and saving rules
 
