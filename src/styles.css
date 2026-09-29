@@ -377,6 +377,25 @@ button { color: inherit; }
 .panel.selected { outline: 1.5px solid #2b6fdd; outline-offset: 2px; }
 .panel.anchor { outline-color: #1955ad; box-shadow: 0 0 0 1px rgb(25 85 173 / 18%); }
 .panel > img { width: 100%; height: 100%; display: block; object-fit: contain; pointer-events: none; }
+.layout-group-frame {
+  position: absolute;
+  z-index: 4;
+  border: 2px dashed #8b4fa8;
+  border-radius: 3px;
+  pointer-events: none;
+}
+.layout-group-frame > span {
+  position: absolute;
+  top: -11px;
+  left: 0;
+  padding: 1px 4px;
+  background: #8b4fa8;
+  color: #fff;
+  font-size: 8px;
+  font-weight: 750;
+  letter-spacing: .06em;
+  line-height: 1.2;
+}
 .missing-asset-placeholder {
   width: 100%;
   height: 100%;

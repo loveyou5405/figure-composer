@@ -12,7 +12,7 @@ Own deterministic alphabetic sequences, geometry-based reading order, explicit r
 
 ## 2. User-facing behavior
 
-`Auto Label Page` assigns letters from top to bottom and left to right, continuing from preceding pages in the same Figure. `Auto Label Selection` starts at A or a for only the selected subset. Label settings can switch automatic sequences between uppercase and lowercase; existing automatic labels update immediately while manual labels are preserved. `New Figure` establishes a new sequence boundary, so its first automatic page label starts at A or a. Labels remain attached during every panel layout operation and never change merely because the panel moves or resizes. Editing text marks it manual. Hidden labels retain their text but do not render or participate in automatic major-panel sequencing.
+`Auto Label Page` assigns letters from top to bottom and left to right, continuing from preceding pages in the same Figure. The UI applies automatic labeling at page scope; multiple selection retains its other layout and editing controls without an Auto Label Selection action. Label settings can switch automatic sequences between uppercase and lowercase; existing automatic labels update immediately while manual labels are preserved. `New Figure` establishes a new sequence boundary, so its first automatic page label starts at A or a. Labels remain attached during every panel layout operation and never change merely because the panel moves or resizes. Editing text marks it manual. Hidden labels retain their text but do not render or participate in automatic major-panel sequencing.
 
 ## 3. Data model
 

@@ -33,6 +33,7 @@ import {
   autoLabelPanels,
   createDefaultPanelLabel,
   getPageLabelStartIndex,
+  getPanelVisualBoundsMm,
   resetPanelLabelOffset,
   updatePanelLabelOffset,
   updatePanelLabelText,
@@ -63,6 +64,7 @@ import {
   placePanelGeometry,
   duplicateSelectedPanels,
   resizePanelGeometry,
+  setPanelLayoutGroup,
   type Panel,
   type PanelGeometry,
   type PointMm,
@@ -230,7 +232,6 @@ interface PendingPresetEdit {
 }
 
 interface PendingRelabel {
-  readonly target: "page" | "selection";
   readonly policy: ManualLabelPolicy;
 }
 
@@ -360,12 +361,20 @@ export function App() {
   const selectedPanels = selection.selectedPanelIds
     .map((id) => panels.find((panel) => panel.id === id))
     .filter((panel): panel is Panel => Boolean(panel));
+  const hasGroupedSelection = selectedPanels.some((panel) => Boolean(panel.layoutGroupId));
   const selectedPanel = selectedPanels.length === 1 ? selectedPanels[0] : null;
   const anchorPanel = selection.anchorPanelId
     ? panels.find((panel) => panel.id === selection.anchorPanelId) ?? null
     : null;
   const anchorAsset = anchorPanel ? assetsById.get(anchorPanel.assetId) ?? null : null;
   const selectedBounds = selectedPanels.length > 1 ? getCollectiveBounds(selectedPanels) : null;
+  const selectedLayoutGroupIds = [...new Set(selectedPanels.flatMap((panel) => panel.layoutGroupId ? [panel.layoutGroupId] : []))];
+  const layoutGroupFrames = selectedLayoutGroupIds.map((groupId) => ({
+    groupId,
+    bounds: getCollectiveBounds(panels
+      .filter((panel) => panel.layoutGroupId === groupId)
+      .map((panel) => ({ ...panel, geometry: getPanelVisualBoundsMm(panel, project.labelSettings) }))),
+  }));
   const selectedAsset = selectedPanel ? assetsById.get(selectedPanel.assetId) ?? null : null;
   const selectedSourceCheck = selectedAsset ? sourceChecksByAssetId.get(selectedAsset.id) ?? null : null;
   const selectedType = selectedPanel ? typesById.get(selectedPanel.typeId) ?? null : null;
@@ -1155,37 +1164,30 @@ export function App() {
       : panel), "Reset panel preset");
   }, [pageDefinition, selectedPanel, selectedPreset, updateActivePagePanels]);
 
-  const runAutoLabel = useCallback((target: "page" | "selection", policy: ManualLabelPolicy) => {
+  const runAutoLabel = useCallback((policy: ManualLabelPolicy) => {
     commitDocument("Auto label panels", (current) => {
-      const startIndex = target === "page"
-        ? getPageLabelStartIndex(current.project.pages, activePageId, current.project.labelSettings)
-        : 0;
+      const startIndex = getPageLabelStartIndex(current.project.pages, activePageId, current.project.labelSettings);
       return {
         ...current,
         project: updateProjectPagePanels(current.project, activePageId, (pagePanels) => autoLabelPanels(pagePanels, {
           rowToleranceMm: current.project.labelSettings.rowToleranceMm,
           startIndex,
-          panelIds: target === "selection" ? selectedPanelIds : undefined,
           manualPolicy: policy,
           letterCase: current.project.labelSettings.letterCase,
         })),
       };
     });
     setPendingRelabel(null);
-  }, [activePageId, commitDocument, selectedPanelIds]);
+  }, [activePageId, commitDocument]);
 
-  const requestAutoLabel = useCallback((target: "page" | "selection") => {
-    const hasManualLabels = panels.some((panel) => (
-      panel.label.visible
-      && panel.label.mode === "manual"
-      && (target === "page" || selectedPanelIds.has(panel.id))
-    ));
+  const requestAutoLabel = useCallback(() => {
+    const hasManualLabels = panels.some((panel) => panel.label.visible && panel.label.mode === "manual");
     if (hasManualLabels) {
-      setPendingRelabel({ target, policy: "preserve" });
+      setPendingRelabel({ policy: "preserve" });
       return;
     }
-    runAutoLabel(target, "preserve");
-  }, [panels, runAutoLabel, selectedPanelIds]);
+    runAutoLabel("preserve");
+  }, [panels, runAutoLabel]);
 
   const updateSelectedLabel = useCallback((update: (panel: Panel) => Panel) => {
     if (!selectedPanel) return;
@@ -1890,6 +1892,7 @@ export function App() {
                 autoPagination={autoPagination}
                 allowMinorScaling={allowMinorScaling}
                 selectedCount={selectedPanels.length}
+                hasGroupedSelection={hasGroupedSelection}
                 pagePanelCount={panels.length}
                 projectPanelCount={allPanels.length}
                 status={autoLayoutStatus}
@@ -1899,6 +1902,17 @@ export function App() {
                 onAutoPaginationChange={(autoPagination) => updateLayoutSettings({ autoPagination })}
                 onAllowMinorScalingChange={(allowMinorScaling) => updateLayoutSettings({ allowMinorScaling })}
                 onArrange={runAutoLayout}
+                onGroupSelection={() => {
+                  if (selectedPanelIds.size < 2) return;
+                  updateActivePagePanels(
+                    (current) => setPanelLayoutGroup(current, selectedPanelIds, createStableId("panel-group")),
+                    "Group panels for Auto Layout",
+                  );
+                }}
+                onUngroupSelection={() => {
+                  if (!hasGroupedSelection) return;
+                  updateActivePagePanels((current) => setPanelLayoutGroup(current, selectedPanelIds, null), "Ungroup panels");
+                }}
               />
             )}
             {activeTab === "Review" && (
@@ -1971,6 +1985,21 @@ export function App() {
                     : { top: guide.positionMm * metrics.pixelsPerMm }}
                   aria-hidden="true"
                 />
+              ))}
+              {layoutGroupFrames.map(({ groupId, bounds }) => (
+                <div
+                  className="layout-group-frame"
+                  key={groupId}
+                  style={{
+                    left: bounds.left * metrics.pixelsPerMm,
+                    top: bounds.top * metrics.pixelsPerMm,
+                    width: bounds.width * metrics.pixelsPerMm,
+                    height: bounds.height * metrics.pixelsPerMm,
+                  }}
+                  aria-hidden="true"
+                >
+                  <span>GROUP</span>
+                </div>
               ))}
               {selectedBounds && (
                 <div
@@ -2106,7 +2135,6 @@ export function App() {
               onApplyGap={applyGap}
               onEqualSize={applyEqualSize}
               onApplyType={assignSelectedType}
-              onAutoLabel={() => requestAutoLabel("selection")}
               pages={project.pages}
               activePageId={activePageId}
               onMoveToPage={moveSelectionToPage}
@@ -2258,7 +2286,7 @@ export function App() {
               onGridChange={setShowGrid}
               onMarginsChange={setShowMargins}
               onMarginsUpdate={updateActivePageMargins}
-              onAutoLabel={() => requestAutoLabel("page")}
+              onAutoLabel={requestAutoLabel}
               onLabelSettingsChange={updateLabelSettings}
               onCommitDefaultOffsets={commitDefaultLabelOffsets}
               pageCount={project.pages.length}
@@ -2462,7 +2490,7 @@ export function App() {
             <label><input type="radio" name="manual-policy" checked={pendingRelabel.policy === "replace"} onChange={() => setPendingRelabel({ ...pendingRelabel, policy: "replace" })} /> Replace all labels</label>
             <div className="dialog-actions">
               <button onClick={() => setPendingRelabel(null)}>Cancel</button>
-              <button className="dialog-primary" onClick={() => runAutoLabel(pendingRelabel.target, pendingRelabel.policy)}>Relabel</button>
+              <button className="dialog-primary" onClick={() => runAutoLabel(pendingRelabel.policy)}>Relabel</button>
             </div>
           </div>
         </div>
@@ -2502,6 +2530,7 @@ interface AutoLayoutSidebarProps {
   readonly autoPagination: boolean;
   readonly allowMinorScaling: boolean;
   readonly selectedCount: number;
+  readonly hasGroupedSelection: boolean;
   readonly pagePanelCount: number;
   readonly projectPanelCount: number;
   readonly status: string | null;
@@ -2511,6 +2540,8 @@ interface AutoLayoutSidebarProps {
   readonly onAutoPaginationChange: (enabled: boolean) => void;
   readonly onAllowMinorScalingChange: (enabled: boolean) => void;
   readonly onArrange: (target: AutoLayoutTarget) => void;
+  readonly onGroupSelection: () => void;
+  readonly onUngroupSelection: () => void;
 }
 
 function AutoLayoutSidebar({
@@ -2519,6 +2550,7 @@ function AutoLayoutSidebar({
   autoPagination,
   allowMinorScaling,
   selectedCount,
+  hasGroupedSelection,
   pagePanelCount,
   projectPanelCount,
   status,
@@ -2528,6 +2560,8 @@ function AutoLayoutSidebar({
   onAutoPaginationChange,
   onAllowMinorScalingChange,
   onArrange,
+  onGroupSelection,
+  onUngroupSelection,
 }: AutoLayoutSidebarProps) {
   return (
     <div className="auto-layout-controls">
@@ -2551,7 +2585,10 @@ function AutoLayoutSidebar({
         <button disabled={selectedCount < 2} onClick={() => onArrange("selection")}>Arrange Selection</button>
         <button disabled={pagePanelCount === 0} onClick={() => onArrange("page")}>Arrange Page</button>
         <button disabled={projectPanelCount === 0} onClick={() => onArrange("project")}>Arrange Project</button>
+        <button disabled={selectedCount < 2} onClick={onGroupSelection}>Group Selection for Auto Layout</button>
+        <button disabled={!hasGroupedSelection} onClick={onUngroupSelection}>Ungroup Selection</button>
       </div>
+      <p className="format-hint">Groups stay together in Auto Layout order. Each panel keeps its own label.</p>
       <details>
         <summary>Advanced</summary>
         <label className="toggle-row compact-toggle">
@@ -2805,7 +2842,7 @@ function AssetsSidebar({
                   : <span className="asset-missing-thumbnail" aria-hidden="true">?</span>}
                 <span>
                   <strong>{asset.sourceName}</strong>
-                  <small>{type.name}{sourceSuffix}</small>
+                  <small>{type.name}{sourceSuffix}{panel.layoutGroupId ? " · Auto Layout group" : ""}</small>
                 </span>
               </button>
             );
@@ -2928,7 +2965,6 @@ interface MultiSelectionInspectorProps {
   readonly onApplyGap: (axis: DistributionAxis) => void;
   readonly onEqualSize: (operation: EqualSizeOperation) => void;
   readonly onApplyType: (typeId: string) => void;
-  readonly onAutoLabel: () => void;
   readonly pages: readonly FigurePage[];
   readonly activePageId: string;
   readonly onMoveToPage: (pageId: string) => void;
@@ -2950,7 +2986,6 @@ function MultiSelectionInspector({
   onApplyGap,
   onEqualSize,
   onApplyType,
-  onAutoLabel,
   pages,
   activePageId,
   onMoveToPage,
@@ -2962,8 +2997,6 @@ function MultiSelectionInspector({
       <p className="eyebrow">Multiple panels</p>
       <h2>{count} selected</h2>
       <p className="source-note" title={anchorName}>Anchor: {anchorName}</p>
-
-      <button className="auto-label-button" onClick={onAutoLabel}>Auto Label Selection</button>
 
       <section className="multi-inspector-section">
         <div className="section-heading">

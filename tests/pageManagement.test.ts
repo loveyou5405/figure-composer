@@ -171,7 +171,7 @@ describe("page management", () => {
     expect(project.pages[0].panels).toHaveLength(1);
   });
 
-  it("keeps reordered pages in their new order during project Auto Layout", () => {
+  it("sorts panels by label while preserving reordered page identities", () => {
     let project = appendA4Page(createInitialProject(), "page-2");
     const firstId = project.pages[0].id;
     project = updateProjectPagePanels(project, firstId, () => [makePanel("a", firstId, 20, 30)]);
@@ -180,7 +180,7 @@ describe("page management", () => {
     const orderedIds = project.pages.map((page) => page.id);
     const arranged = autoArrangeProject(project, { target: "project", activePageId: "page-2" });
     expect(arranged.project.pages.map((page) => page.id)).toEqual(orderedIds);
-    expect(arranged.project.pages.flatMap((page) => page.panels.map((panel) => panel.id))).toEqual(["b", "a"]);
+    expect(arranged.project.pages.flatMap((page) => page.panels.map((panel) => panel.id))).toEqual(["a", "b"]);
   });
 
   it("keeps project Auto Layout panels inside their own figures", () => {

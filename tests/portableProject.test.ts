@@ -4,7 +4,7 @@ import type { ImportedAsset } from "../src/domain/asset";
 import { createInitialEditorDocument, type EditorDocument } from "../src/domain/editorDocument";
 import { createDefaultPanelLabel } from "../src/domain/labels";
 import type { Panel } from "../src/domain/panel";
-import { serializeProjectFile } from "../src/domain/projectFile";
+import { PROJECT_SCHEMA_VERSION, serializeProjectFile } from "../src/domain/projectFile";
 import { updateProjectPagePanels } from "../src/domain/project";
 import {
   createPortableProjectBlob,
@@ -120,6 +120,27 @@ describe("portable Figure projects", () => {
     expect(loaded.portable).toBe(false);
     expect(loaded.document.project).toEqual(document.project);
     expect(loaded.document.assets[0].previewUrl).toBe("blob:original-preview");
+  });
+
+  it("round-trips Auto Layout group metadata without changing labels", async () => {
+    const document = portableDocument();
+    const page = document.project.pages[0];
+    const groupedDocument = {
+      ...document,
+      project: updateProjectPagePanels(document.project, page.id, (panels) => panels.map((panel) => ({
+        ...panel,
+        layoutGroupId: "data-group-a",
+      }))),
+    };
+    const serialized = serializeProjectFile(groupedDocument);
+    expect(JSON.parse(serialized).schemaVersion).toBe(PROJECT_SCHEMA_VERSION);
+    const loaded = await loadProjectDocument(
+      new File([serialized], "grouped.figproj", { type: "application/json" }),
+      [document.assets[0]],
+      mockAssetLoader,
+    );
+    expect(loaded.document.project.pages[0].panels[0].layoutGroupId).toBe("data-group-a");
+    expect(loaded.document.project.pages[0].panels[0].label).toEqual(document.project.pages[0].panels[0].label);
   });
 
   it("refuses to save when exact source bytes are unavailable", async () => {

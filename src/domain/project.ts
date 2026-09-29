@@ -143,6 +143,7 @@ export function duplicateProjectPage(
   }
   const existingPanelIds = new Set(getAllProjectPanels(project).map((panel) => panel.id));
   const createdPanelIds = new Set<string>();
+  const duplicatedGroupIds = new Map<string, string>();
   const duplicate: FigurePage = {
     ...source,
     id: duplicateId,
@@ -152,7 +153,16 @@ export function duplicateProjectPage(
         throw new Error("Duplicated panels must receive new unique IDs.");
       }
       createdPanelIds.add(panelId);
-      return { ...panel, id: panelId, pageId: duplicateId };
+      const layoutGroupId = panel.layoutGroupId
+        ? duplicatedGroupIds.get(panel.layoutGroupId) ?? createStableId("panel-group")
+        : undefined;
+      if (panel.layoutGroupId && layoutGroupId) duplicatedGroupIds.set(panel.layoutGroupId, layoutGroupId);
+      return {
+        ...panel,
+        id: panelId,
+        pageId: duplicateId,
+        ...(layoutGroupId ? { layoutGroupId } : {}),
+      };
     }),
   };
   const pages = [...project.pages];

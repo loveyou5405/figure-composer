@@ -177,6 +177,10 @@ export function validateDocument(document: EditorDocument): void {
       || !["automatic", "manual"].includes(panel.label.offsetMode)) {
       errors.push(`Panel ${panel.id} has invalid label metadata.`);
     }
+    if (panel.layoutGroupId !== undefined
+      && (typeof panel.layoutGroupId !== "string" || !panel.layoutGroupId.trim())) {
+      errors.push(`Panel ${panel.id} has invalid Auto Layout group metadata.`);
+    }
   }));
   validateLabelSettings(document.project.labelSettings, errors);
   if (!["balanced", "compact", "equal-rows"].includes(document.layoutSettings.mode)

@@ -77,9 +77,10 @@ npm run version:check
 - Page/panel smart snapping, temporary alignment guides, and Alt/Option snap disable
 - Anchor/page alignment, equal-gap distribution, explicit spacing, and aspect-safe equal width/height
 - Deterministic Auto Layout with Balanced, Compact, and Equal Rows modes
+- Explicit Auto Layout groups that stay together during label-ordered arrangement and pagination
 - Exact 3 mm default gaps, A4 safe-area packing, and automatic multi-page overflow
 - Preset-preserving Selection, Page, and Project arrangement with optional bounded minor scaling
-- Explicit Auto Label Page and Auto Label Selection with 5 mm row grouping
+- Explicit Auto Label Page with 5 mm row grouping
 - Live panel-attached text labels that follow movement and resizing without silent relabeling
 - Manual label preservation or explicit replace-all behavior
 - Hidden-label exclusion and editable millimeter label offsets, with a publication-style -2 mm / -2 mm outside-panel default

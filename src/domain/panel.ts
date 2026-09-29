@@ -1,5 +1,6 @@
 import { getPageMargins, type PageDefinition } from "./page";
 import type { PanelLabel } from "./labels";
+import { createStableId } from "./id";
 
 export interface PointMm {
   readonly xMm: number;
@@ -25,6 +26,8 @@ export interface Panel {
   readonly manualScaleOverride: boolean;
   /** Set only when Auto Layout applied its optional bounded size adjustment. */
   readonly layoutScaleFactor?: number;
+  /** Optional Auto Layout grouping; it does not affect label rendering or numbering. */
+  readonly layoutGroupId?: string;
   readonly label: PanelLabel;
 }
 
@@ -185,27 +188,54 @@ export function removePanelById(
   return panels.filter((panel) => panel.id !== panelId);
 }
 
+export function setPanelLayoutGroup(
+  panels: readonly Panel[],
+  panelIds: ReadonlySet<string>,
+  layoutGroupId: string | null,
+): Panel[] {
+  if (panelIds.size === 0) return [...panels];
+  return panels.map((panel) => {
+    if (!panelIds.has(panel.id)) return panel;
+    if (layoutGroupId) return { ...panel, layoutGroupId };
+    const { layoutGroupId: _layoutGroupId, ...ungrouped } = panel;
+    return ungrouped;
+  });
+}
+
 export function duplicateSelectedPanels(
   panels: readonly Panel[],
   panelIds: ReadonlySet<string>,
   page: PageDefinition,
   idFactory: () => string,
   offsetMm = 4,
+  groupIdFactory: () => string = () => createStableId("panel-group"),
 ): { panels: Panel[]; duplicatedIds: string[] } {
   if (panelIds.size === 0) return { panels: [...panels], duplicatedIds: [] };
   const existingIds = new Set(panels.map((panel) => panel.id));
   const duplicatedIds: string[] = [];
-  const duplicates = panels.filter((panel) => panelIds.has(panel.id)).map((panel) => {
+  const duplicatedGroupIds = new Map<string, string>();
+  const selected = panels.filter((panel) => panelIds.has(panel.id));
+  const selectedGroupCounts = selected.reduce((counts, panel) => {
+    if (panel.layoutGroupId) counts.set(panel.layoutGroupId, (counts.get(panel.layoutGroupId) ?? 0) + 1);
+    return counts;
+  }, new Map<string, number>());
+  const duplicates = selected.map((panel) => {
     const id = idFactory();
     if (!id || existingIds.has(id) || duplicatedIds.includes(id)) {
       throw new Error("Duplicated panels must receive new unique IDs.");
     }
     duplicatedIds.push(id);
+    const layoutGroupId = panel.layoutGroupId && (selectedGroupCounts.get(panel.layoutGroupId) ?? 0) > 1
+      ? duplicatedGroupIds.get(panel.layoutGroupId) ?? groupIdFactory()
+      : undefined;
+    if (panel.layoutGroupId && layoutGroupId) duplicatedGroupIds.set(panel.layoutGroupId, layoutGroupId);
     const maxX = Math.max(0, page.widthMm - panel.geometry.widthMm);
     const maxY = Math.max(0, page.heightMm - panel.geometry.heightMm);
+    const { layoutGroupId: _sourceLayoutGroupId, ...duplicatedPanel } = panel;
     return {
-      ...panel,
+      ...duplicatedPanel,
       id,
+      ...(layoutGroupId ? { layoutGroupId } : {}),
       geometry: {
         ...panel.geometry,
         xMm: clamp(snapMm(panel.geometry.xMm + offsetMm, page.gridMm), 0, maxX),

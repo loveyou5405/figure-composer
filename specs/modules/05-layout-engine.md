@@ -12,13 +12,15 @@ Provide deterministic page-local movement, resizing, multi-selection layout tool
 
 ## 2. User-facing behavior
 
-Manual layout retains Milestone 4 behavior. The Layout sidebar additionally exposes Balanced, Compact, and Equal Rows modes; one millimeter gap value used for both axes; Arrange Selection, Arrange Page, and Arrange Project; Auto Pagination on by default; and optional minor scaling off by default. Each page exposes Word-style top, right, bottom, and left safe-margin controls. Auto Layout preserves the current semantic/project order and never relabels panels.
+Manual layout retains Milestone 4 behavior. The Layout sidebar additionally exposes Balanced, Compact, and Equal Rows modes; one millimeter gap value used for both axes; Arrange Selection, Arrange Page, and Arrange Project; Auto Pagination on by default; optional minor scaling off by default; and controls to group or ungroup selected panels for Auto Layout. Each page exposes Word-style top, right, bottom, and left safe-margin controls. Auto Layout sorts groups as units by the earliest non-empty natural label in each unit; ungrouped panels are single-panel units. The order inside each group follows the page's panel list, and labels are never changed.
 
 ## 3. Data model
 
 All regions, gaps, placements, and scores are calculated from page-local millimeters. The default safe region is the A4 page minus its 12 mm margins: 186 × 273 mm; each edge can be changed independently and the resulting rectangle is authoritative for layout, snapping, validation, and rendering. Candidates contain ordered rows, panel-ID-to-geometry placements, a scale factor, a stable row-partition key, total score, and score breakdown. Each panel's packing footprint is the union of its image rectangle and its visible label bounds, so both stay inside the safe region and row spacing prevents labels from colliding with adjacent panel content.
 
 Optional minor scaling records `layoutScaleFactor` on a panel. It does not change `baseSizeMm`, `presetId`, type, label, or `manualScaleOverride`. Reset to preset clears the layout adjustment.
+
+`layoutGroupId` is optional panel metadata. Panels with the same value form one Auto Layout ordering unit; a group cannot be split across overflow pages. Grouping does not change panel labels, label numbering, selection behavior, or manual geometry operations.
 
 ## 4. Public interfaces
 
@@ -31,11 +33,11 @@ The result includes the before/after projects, affected stable panel IDs, create
 
 ## 5. Row packing algorithm
 
-Panel order is never permuted. A bounded beam search enumerates contiguous row partitions. For each next panel it tries appending to the current row and beginning a new row, rejects width/height overflow immediately, de-duplicates states by row-length partition, and keeps the best 512 partial states. This avoids a square-grid assumption while remaining responsive for the 10–40 panel target workload.
+Auto Layout first creates stable ordering units from explicit groups and ungrouped panels, then sorts those units by their earliest non-empty natural label. An unlabeled unit inherits the preceding labeled unit's sort key; leading unlabeled units stay first. Ties retain the first panel-list position. Members inside a group retain their panel-list order and cannot be interleaved with another unit. A bounded beam search enumerates contiguous row partitions over that resulting order. For each next panel it tries appending to the current row and beginning a new row, rejects width/height overflow immediately, de-duplicates states by row-length partition, and keeps the best 512 partial states. This avoids a square-grid assumption while remaining responsive for the 10–40 panel target workload.
 
 Balanced and Equal Rows center rows without changing the requested gap. Compact left-aligns rows and ranks avoidable row breaks ahead of every secondary score, so it always keeps filling the current row while the next ordered panel still fits. Within every row, panels with visible non-empty labels share one label-anchor Y position. A panel without a rendered label keeps its image center aligned to the preceding image; an unlabeled run before the first labeled panel uses that first labeled image center as its fallback. Visible label extents still expand the row above or below these anchors for collision avoidance. Vertical placement starts at the safe-region top and advances by the combined footprint plus the exact vertical gap.
 
-Pagination chooses the largest consecutive prefix that has a valid candidate, assigns it to the current page, and repeats with the remainder. Project arrangement processes each Figure independently, reuses that Figure's ordered existing pages before creating new A4 pages, and never moves panels across Figure boundaries. Page arrangement creates overflow pages inside the active Figure only when Auto Pagination is enabled. Selection arrangement first attempts its existing collective bounds, then expands from that top-left anchor to the remaining safe area; unrelated panels are not moved.
+Pagination chooses the largest consecutive prefix that has a valid candidate without cutting through a layout group, assigns it to the current page, and repeats with the remainder. Project arrangement processes each Figure independently, reuses that Figure's ordered existing pages before creating new A4 pages, and never moves panels across Figure boundaries. Page arrangement creates overflow pages inside the active Figure only when Auto Pagination is enabled. Selection arrangement first attempts its existing collective bounds, then expands from that top-left anchor to the remaining safe area; unrelated panels are not moved.
 
 ## 6. Candidate scoring
 
@@ -65,7 +67,7 @@ An avoidable single-panel last row receives a modest mode-specific penalty. Stab
 
 ## 7. State transitions
 
-Arrange Selection changes only selected panel geometries and preserves ownership. Arrange Page changes active-page panels and may move overflow panels to newly created pages. Arrange Project gathers panels in page-array/panel-array order, repacks them into existing ordered pages, then appends pages only when required. Cross-page moves update `pageId` and page-local geometry while preserving panel identity, type, preset, label, and manual-override state.
+Arrange Selection changes only selected panel geometries and preserves ownership. Arrange Page changes active-page panels and may move overflow panels to newly created pages. Arrange Project gathers panels within each Figure, sorts them by label/group order, repacks them into existing ordered pages, then appends pages only when required. Cross-page moves update `pageId` and page-local geometry while preserving panel identity, type, preset, label, group, and manual-override state.
 
 ## 8. Edge cases and errors
 
@@ -73,11 +75,11 @@ Invalid gaps/regions are rejected. A panel larger than the safe area, even at an
 
 ## 9. Persistence requirements
 
-Committed geometry, page ownership, layout adjustment metadata, and project-level layout settings are serialized in `.figproj`. Candidates, scores, selection, and transaction previews remain transient.
+Committed geometry, page ownership, optional `layoutGroupId`, layout adjustment metadata, and project-level layout settings are serialized in `.figproj`. The field is optional and project schema `0.1.0` remains unchanged, so existing files without group metadata remain importable. Candidates, scores, selection, and transaction previews remain transient.
 
 ## 10. Testing requirements
 
-Cover equal and mixed aspect ratios, mixed scientific types, exact gaps, label-anchor alignment, preceding-image center alignment for unlabeled panels, safe-area compliance, deterministic top-N output, no overlap, order preservation, all three modes, selection/page/project isolation, two- and three-page overflow, existing-page reuse, stable IDs, preset/manual override/label preservation, zoom independence, orphan scoring, default no-scaling, and the 95–100% scaling bound.
+Cover equal and mixed aspect ratios, mixed scientific types, exact gaps, label-anchor alignment, preceding-image center alignment for unlabeled panels, group ordering and pagination integrity, safe-area compliance, deterministic top-N output, no overlap, order preservation, all three modes, selection/page/project isolation, two- and three-page overflow, existing-page reuse, stable IDs, preset/manual override/label preservation, zoom independence, orphan scoring, default no-scaling, and the 95–100% scaling bound.
 
 ## 11. Acceptance criteria
 

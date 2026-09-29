@@ -26,6 +26,7 @@ Project schema `0.1.0` stores:
 
 - schema version and saved timestamp;
 - project ID/title, ordered pages with Figure IDs, immutable A4 definitions, page-owned panels, labels, and project label settings;
+- optional panel Auto Layout group IDs (omitted by older projects and independent of label metadata);
 - project-scoped asset metadata, source fingerprint fields, and available clipboard source diagnostics;
 - panel types and presets;
 - Auto Layout settings.
@@ -38,7 +39,7 @@ Portable projects do not depend on arbitrary local paths. Import Figure extracts
 
 ## 5. Schema and migrations
 
-`deserializeProjectFile` parses, migrates, normalizes legacy pages without Figure IDs into one continuous Figure, validates, and only then returns a replacement editor document. The migration runner accepts an explicit ordered migration chain and rejects missing steps, cycles, excessive chains, and unsupported versions. Structural validation covers Figure/page ownership, stable unique IDs, finite millimeter geometry, positive sizes, asset/type/preset references, label shape, A4 definitions, and Auto Layout settings.
+`deserializeProjectFile` parses, migrates, normalizes legacy pages without Figure IDs into one continuous Figure, validates, and only then returns a replacement editor document. The migration runner accepts an explicit ordered migration chain and rejects missing steps, cycles, excessive chains, and unsupported versions. Structural validation covers Figure/page ownership, stable unique IDs, finite millimeter geometry, positive sizes, asset/type/preset references, label and optional Auto Layout group metadata, A4 definitions, and Auto Layout settings. Adding optional panel fields must not invalidate existing schema `0.1.0` files; retain regression coverage for legacy JSON and portable `.figproj` imports.
 
 ## 6. History model
 

@@ -2,6 +2,33 @@
 
 Every released version must update `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, `CHANGELOG.md`, this file, its immutable file under `specs/releases/`, and the versioned launcher/closer. The production build fails when these version records disagree.
 
+## v1.5.3 — 1.5.3 — 2026-09-30
+
+- Fixed Auto Layout so a group is treated as one composite item during row packing; group members move together and keep their relative positions.
+- Kept labels independent and retained the existing `.figproj` schema for saved-project compatibility.
+- Regenerated the versioned Windows launcher and closer.
+
+## v1.5.2 — 1.5.2 — 2026-09-30
+
+- Removed Auto Label Selection from the multiple-panel inspector while preserving page labeling and the other selection tools.
+- Regenerated the versioned Windows launcher and closer.
+
+## v1.5.1 — 1.5.1 — 2026-09-30
+
+- Added a labeled outline around a selected Auto Layout group so its membership is visible on the canvas.
+- Regenerated the versioned Windows launcher and closer.
+
+## v1.5.0 — 1.5.0 — 2026-09-30
+
+- Added explicit Auto Layout groups. Grouped panels sort as one unit, keep their internal panel-list order, and stay on the same overflow page.
+- Kept labels independent from groups and retained the existing `.figproj` schema so older saved projects remain importable.
+- Regenerated the versioned Windows launcher and closer.
+
+## v1.4.1 — 1.4.1 — 2026-09-30
+
+- Auto Layout now arranges panels by natural label order, while keeping unlabeled panels with the preceding labeled panel in the panel list.
+- Regenerated the versioned Windows launcher and closer.
+
 ## v1.4.0 — 1.4.0 — 2026-09-24
 
 - Added single-image preset selection, lowercase labels, and compact horizontal-first layout behavior.

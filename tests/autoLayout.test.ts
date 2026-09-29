@@ -87,6 +87,42 @@ function expectNoOverlap(geometries: readonly PanelGeometry[]): void {
 }
 
 describe("deterministic row-packing candidates", () => {
+  it("keeps an unlabeled panel with the preceding labeled panel", () => {
+    const panels = [
+      makePanel("b", 30, 20),
+      { ...makePanel("b-data", 30, 20), label: { ...createDefaultPanelLabel(), text: "" } },
+      makePanel("a", 30, 20),
+    ];
+    const [candidate] = generateAutoLayoutCandidates(
+      panels,
+      { xMm: 12, yMm: 12, widthMm: 186, heightMm: 60 },
+      { mode: "compact", horizontalGapMm: 3 },
+    );
+
+    expect(candidate.rows[0].panelIds).toEqual(["a", "b", "b-data"]);
+  });
+
+  it("sorts explicit Auto Layout groups as one label-anchored unit", () => {
+    const panels = [
+      makePanel("b", 30, 20),
+      { ...makePanel("a", 30, 20), layoutGroupId: "data-a" },
+      {
+        ...makePanel("a-data", 30, 20),
+        label: { ...createDefaultPanelLabel(), text: "" },
+        layoutGroupId: "data-a",
+      },
+    ];
+    const [candidate] = generateAutoLayoutCandidates(
+      panels,
+      { xMm: 12, yMm: 12, widthMm: 186, heightMm: 60 },
+      { mode: "compact", horizontalGapMm: 3 },
+    );
+
+    expect(candidate.rows[0].panelIds).toEqual(["a", "a-data", "b"]);
+    expect(panels[1].label.text).toBe("A");
+    expect(panels[2].label.text).toBe("");
+  });
+
   it("packs equal-size panels inside the A4 safe area with exact millimeter gaps", () => {
     const panels = Array.from({ length: 6 }, (_, index) => makePanel(`p${index}`, 50, 30));
     const region = getSafeLayoutRegion(A4_PORTRAIT);
@@ -392,6 +428,23 @@ describe("auto-arrange scopes and pagination", () => {
       panels.map((panel) => panel.id),
     );
     expect(getProjectOwnershipErrors(result.project)).toEqual([]);
+  });
+
+  it("keeps a layout group on the same page during overflow pagination", () => {
+    const panels = hideLabels(Array.from({ length: 7 }, (_, index) => makePanel(`p${index}`, 90, 90)))
+      .map((panel) => panel.id === "p0" || panel.id === "p6"
+        ? { ...panel, layoutGroupId: "paired-data" }
+        : panel);
+    const project = projectWithPanels(panels);
+    const result = autoArrangeProject(project, {
+      target: "page",
+      activePageId: project.pages[0].id,
+      autoPaginate: true,
+      pageIdFactory: (pageNumber) => `group-page-${pageNumber}`,
+    });
+    expect(result.applied).toBe(true);
+    const pageIds = new Map(result.project.pages.flatMap((page) => page.panels.map((panel) => [panel.id, page.id])));
+    expect(pageIds.get("p0")).toBe(pageIds.get("p6"));
   });
 
   it("inserts overflow pages inside the active Figure before the next Figure", () => {

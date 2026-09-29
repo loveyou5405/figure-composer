@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.5.3] - 2026-09-30
+
+- Fixed Auto Layout so grouped panels are packed and positioned as one composite unit, staying together in the same row with their relative arrangement preserved.
+
+## [1.5.2] - 2026-09-30
+
+- Removed Auto Label Selection from the multi-panel inspector; Auto Label Page and other selection tools remain available.
+
+## [1.5.1] - 2026-09-30
+
+- Show a labeled outline around the full Auto Layout group whenever one of its panels is selected.
+
+## [1.5.0] - 2026-09-30
+
+- Added Auto Layout grouping. Grouped panels sort together by the earliest label in the group, while keeping their internal order and staying on the same overflow page.
+- Labels remain independent, and the project schema remains compatible with existing `.figproj` files.
+
+## [1.4.1] - 2026-09-30
+
+- Auto Layout now uses natural label order to position panels, independent of image upload order; unlabeled panels stay with the preceding labeled panel in the panel list.
+
 ## [1.4.0] - 2026-09-24
 
 - Added single-image preset selection, lowercase labels, and compact horizontal-first layout behavior.
